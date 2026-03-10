@@ -1,0 +1,57 @@
+/* 화면 중앙 정렬 */
+.wrapper {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+
+/* 1440 기준 컨테이너 */
+.container {
+  width: 1440px;
+  min-height: 1024px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 헤더 */
+.header {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  padding: 0 40px;
+  border-bottom: 1px solid #eee;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+/* 메인 영역 */
+.main {
+  flex: 1;
+  display: flex;
+}
+
+/* 콘텐츠 */
+.content {
+  flex: 3;
+  padding: 40px;
+}
+
+/* 사이드바 */
+.sidebar {
+  flex: 1;
+  padding: 40px;
+  border-left: 1px solid #eee;
+  background: #fafafa;
+}
+
+/* 푸터 */
+.footer {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid #eee;
+  font-size: 14px;
+}
