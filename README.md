@@ -61,4 +61,4 @@ main 브랜치 직접 push 금지
 
 작업 전 반드시 git pull origin main 실행
 
-패키지 추가 시 팀원에게 공유
+패키지 추가 시 팀원에게 공유! 
