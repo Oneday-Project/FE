@@ -2,7 +2,11 @@ import { useState } from 'react'
 
 const navItems = ['소개', '논문', '로드맵', '커뮤니티']
 
-export default function Navbar() {
+interface NavbarProps {
+  onNavigate?: (item: string) => void
+}
+
+export default function Navbar({ onNavigate }: NavbarProps) {
   const [active, setActive] = useState('논문')
   const [hovered, setHovered] = useState<string | null>(null)
 
@@ -32,7 +36,10 @@ export default function Navbar() {
         {navItems.map((item) => (
           <li key={item}>
             <button
-              onClick={() => setActive(item)}
+              onClick={() => {
+                setActive(item)
+                onNavigate?.(item)
+              }}
               onMouseEnter={() => setHovered(item)}
               onMouseLeave={() => setHovered(null)}
               style={{
