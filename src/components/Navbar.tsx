@@ -1,12 +1,17 @@
 import { useState } from 'react'
 
-const navItems = ['소개', '논문', '로드맵', '커뮤니티']
+const navItems = [
+  { name: '소개', key: 'main' },
+  { name: '논문', key: 'papers' },
+  { name: '로드맵', key: 'roadmap' },
+  { name: '커뮤니티', key: 'community' }
+]
 
 interface NavbarProps {
   onNavigate?: (item: string) => void
 }
 
-export default function Navbar({ onNavigate }: NavbarProps) {
+export default function Navbar({ onNavigate }: { onNavigate: (p: string) => void }) {
   const [active, setActive] = useState('논문')
   const [hovered, setHovered] = useState<string | null>(null)
 
@@ -23,43 +28,51 @@ export default function Navbar({ onNavigate }: NavbarProps) {
       padding: '0 80px',
     }}>
 
-      {/* 로고 - 좌측 */}
+      {/* 로고 */}
       <div>
-        <img src="/logo.svg" alt="H-AI Grad" style={{ height: '28px', display: 'block' }} />
+        <img src="/logo.svg" style={{ height: '28px' }} />
       </div>
 
-      {/* 탭 - 가운데 */}
+      {/* 메뉴 */}
       <ul style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
+        display: 'flex', gap: '8px',
         listStyle: 'none', margin: 0, padding: 0
       }}>
         {navItems.map((item) => (
-          <li key={item}>
+          <li key={item.name}>
             <button
               onClick={() => {
-                setActive(item)
-                onNavigate?.(item)
+                  setActive(item.name)
+                  onNavigate(item.key) 
               }}
-              onMouseEnter={() => setHovered(item)}
+              onMouseEnter={() => setHovered(item.name)}
               onMouseLeave={() => setHovered(null)}
               style={{
-                padding: '8px 20px', fontSize: '15px',
-                border: 'none', background: 'none', cursor: 'pointer',
+                padding: '8px 20px',
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
                 borderRadius: '8px',
-                color: active === item || hovered === item ? '#3B6FE8' : '#9ca3af',
-                fontWeight: active === item ? 600 : 400,
-                transition: 'color 0.15s ease',
+                color: active === item.name || hovered === item.name
+                  ? '#3B6FE8'
+                  : '#9ca3af',
+                fontWeight: active === item.name ? 600 : 400,
               }}
             >
-              {item}
+              {item.name}
             </button>
           </li>
         ))}
       </ul>
 
-      {/* 유저 - 우측 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <span style={{ fontSize: '15px', fontWeight: 500, color: '#1a1a1a' }}>wnnnye님</span>
+      {/* 로그인 */}
+      <div style={{ textAlign: 'right' }}>
+        <span
+          onClick={() => onNavigate("login")} 
+          style={{ cursor: 'pointer' }}
+        >
+          로그인 / 회원가입
+        </span>
       </div>
 
     </nav>
