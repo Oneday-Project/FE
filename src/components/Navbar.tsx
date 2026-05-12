@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 const navItems = [
   { name: '소개', key: 'main' },
@@ -7,12 +8,20 @@ const navItems = [
   { name: '커뮤니티', key: 'community' }
 ]
 
-interface NavbarProps {
-  onNavigate?: (item: string) => void
+const keyToPath: Record<string, string> = {
+  main: '/',
+  papers: '/papers',
+  roadmap: '/roadmap',
+  community: '/community',
+  login: '/login',
 }
 
-export default function Navbar({ onNavigate }: { onNavigate: (p: string) => void }) {
-  const [active, setActive] = useState('논문')
+export default function Navbar() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const currentItem = navItems.find(item => location.pathname.startsWith('/' + item.key))
+  const [active, setActive] = useState(currentItem?.name ?? '논문')
   const [hovered, setHovered] = useState<string | null>(null)
 
   return (
@@ -27,7 +36,6 @@ export default function Navbar({ onNavigate }: { onNavigate: (p: string) => void
       alignItems: 'center',
       padding: '0 80px',
     }}>
-
       {/* 로고 */}
       <div>
         <img src="/logo.svg" style={{ height: '28px' }} />
@@ -42,8 +50,8 @@ export default function Navbar({ onNavigate }: { onNavigate: (p: string) => void
           <li key={item.name}>
             <button
               onClick={() => {
-                  setActive(item.name)
-                  onNavigate(item.key) 
+                setActive(item.name)
+                navigate(keyToPath[item.key])
               }}
               onMouseEnter={() => setHovered(item.name)}
               onMouseLeave={() => setHovered(null)}
@@ -68,13 +76,12 @@ export default function Navbar({ onNavigate }: { onNavigate: (p: string) => void
       {/* 로그인 */}
       <div style={{ textAlign: 'right' }}>
         <span
-          onClick={() => onNavigate("login")} 
+          onClick={() => navigate('/login')}
           style={{ cursor: 'pointer' }}
         >
           로그인 / 회원가입
         </span>
       </div>
-
     </nav>
   )
 }
