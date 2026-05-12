@@ -10,7 +10,7 @@ import Roadmap from "./pages/Roadmap"
 function App() {
 
   const [page, setPage] = useState<"main" | "papers" | "roadmap" | "community" | "login">("main");
-
+   
   return (
     <div style={{
       width: '100vw',
