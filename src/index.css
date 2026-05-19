@@ -1,3 +1,5 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -23,7 +25,7 @@ html, body {
   --text-h: #1a1a1a;
   --bg: #f0f4ff;
   --border: #e5e4e7;
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: 'Pretendard', system-ui, 'Segoe UI', Roboto, sans-serif; 
 
   font: 16px/145% var(--sans);
   letter-spacing: 0.18px;
