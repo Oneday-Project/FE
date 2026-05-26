@@ -18,6 +18,8 @@ type Answers = {
   [key: string]: string | string[];
 };
 
+
+
 /* 질문 데이터 */
 const questions: Question[] = [
   {
@@ -311,7 +313,10 @@ export default function Roadmap() {
         <div style={{ marginTop: '60px', textAlign: 'center' }}>
           <button
             disabled={!isAllAnswered}
-            onClick={() => isAllAnswered && navigate("/roadmap-result")}
+            onClick={() =>
+              isAllAnswered &&
+              navigate("/roadmap-result", { state: answers })
+            }
             style={{
               padding: '14px 28px',
               borderRadius: '10px',
