@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 
@@ -6,7 +6,8 @@ import LoginPage from './pages/login'
 import Community from './pages/Community'
 import Papers from './pages/Papers'
 import Roadmap from './pages/Roadmap'
-import MyPage from './pages/mypage'
+import MyPage from './pages/Mypage'
+import RoadmapResult from "./pages/RoadmapResult";
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
                 <Route path="/" element={<MainPage />} />
                 <Route path="/papers" element={<Papers />} />
                 <Route path="/roadmap" element={<Roadmap />} />
+                <Route path="/roadmap-result" element={<RoadmapResult />} />
                 <Route path="/community" element={<Community />} />
                 <Route path="/mypage" element={<MyPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -44,6 +46,9 @@ function App() {
 }
 
 function MainPage() {
+
+  const navigate = useNavigate(); 
+
   return (
     <div style={{
       position: 'relative',
@@ -89,7 +94,7 @@ function MainPage() {
         width: 'fit-content'
       }}>
         <button
-          onClick={() => window.location.href = '/login'}
+          onClick={() => navigate('/login')}  
           style={{
             padding: '13px 28px',
             background: '#3B6FE8',

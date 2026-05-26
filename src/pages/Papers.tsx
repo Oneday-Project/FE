@@ -92,7 +92,7 @@ export default function Papers() {
       }}>
         {/* Hero */}
         <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#1a1a1a', marginBottom: '8px', lineHeight: 1.2 }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#1a1a1a', marginBottom: '12px', lineHeight: 1.2 }}>
             내 분야 논문, 한 번에.
           </h1>
           <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>
