@@ -1,18 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, type CSSProperties, type ReactNode } from 'react'
+import type { Paper } from './Papers'
 
-// Papers.tsx의 mockPapers와 동일한 타입
-export type Paper = {
-  id: number
-  year: number
-  tag: string
-  title: string
-  summary: string
-  chips: string[]
-  bookmarked: boolean
-}
-
-// Papers.tsx에서 navigate 대신 이 컴포넌트를 사용하는 경우
-// props로 paper와 onBack을 받습니다
 export default function PaperDetail({
   paper,
   allPapers,
@@ -22,77 +10,49 @@ export default function PaperDetail({
   allPapers: Paper[]
   onBack: () => void
 }) {
-  const [bookmarked, setBookmarked] = useState(paper.bookmarked)
+  const [bookmarked, setBookmarked] = useState(paper.bookmarkCount > 0)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [abstractKo, setAbstractKo] = useState<string | null>(null)
   const [takeaways, setTakeaways] = useState<{ what: string; how: string; soWhat: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // 랜덤 3개 논문 (현재 논문 제외)
-  const relatedPapers = allPapers
-    .filter(p => p.id !== paper.id)
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 3)
+  const year = getYear(paper.publishedDate)
+  const chips = getFieldNames(paper)
+  const authorsText = getAuthorsText(paper)
+  const doiText = paper.doi || paper.arxivId || '-'
+  const importance = clampStarTier(paper.starTier)
 
-  // 중요도: 임시로 title 길이 기반 1~5 (실제로는 paper.importance 같은 필드 사용)
-  const importance = 3
+  const relatedPapers = useMemo(() => {
+    return allPapers
+      .filter(p => p.arxivId !== paper.arxivId)
+      .slice(0, 3)
+  }, [allPapers, paper.arxivId])
 
-  // AI 연동 - AI 요약 + Abstract KO + Key Takeaways
   useEffect(() => {
-    const fetchAI = async () => {
-      setLoading(true)
-      try {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [
-              {
-                role: 'user',
-                content: `다음 논문 정보를 기반으로 JSON만 반환해. 다른 텍스트나 마크다운 없이 순수 JSON만.
+    setBookmarked(paper.bookmarkCount > 0)
+  }, [paper.arxivId, paper.bookmarkCount])
 
-논문 제목: ${paper.title}
-논문 요약: ${paper.summary}
+  useEffect(() => {
+    setLoading(true)
 
-반환 형식:
-{
-  "aiSummary": "한 문장 핵심 요약 (40자 내외)",
-  "abstractKo": "한국어 abstract (100자 내외)",
-  "takeaways": {
-    "what": "이 논문이 무엇을 다루는지 (공백 포함 119자)",
-    "how": "어떤 방법으로 해결했는지 (공백 포함 119자)",
-    "soWhat": "왜 중요한지 시사점 (공백 포함 119자)"
-  }
-}`,
-              },
-            ],
-          }),
-        })
-        const data = await res.json()
-        const text = data.content?.map((c: { type: string; text?: string }) => c.text || '').join('')
-        const clean = text.replace(/```json|```/g, '').trim()
-        const parsed = JSON.parse(clean)
-        setAiSummary(parsed.aiSummary)
-        setAbstractKo(parsed.abstractKo)
-        setTakeaways(parsed.takeaways)
-      } catch (e) {
-        setAiSummary('AI 요약을 불러오는 중 오류가 발생했습니다.')
-        setAbstractKo('Abstract 번역을 불러오는 중 오류가 발생했습니다.')
-        setTakeaways({
-          what: '내용을 불러오지 못했습니다.',
-          how: '내용을 불러오지 못했습니다.',
-          soWhat: '내용을 불러오지 못했습니다.',
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchAI()
-  }, [paper.id])
+    /*
+      지금 Papers.tsx의 API 응답에는 aiSummary, abstractKo, takeaways가 없어서
+      화면이 깨지지 않도록 abstract 기반 fallback을 넣어둔 상태야.
 
-  const baseStyle: React.CSSProperties = {
+      나중에 백엔드에서 요약 API가 생기면 여기만 fetch로 교체하면 됨.
+      예:
+      const res = await fetch(`${BASE_URL}/papers/${paper.arxivId}/summary`)
+    */
+
+    const fallback = buildFallbackAIContent(paper)
+
+    setAiSummary(fallback.aiSummary)
+    setAbstractKo(fallback.abstractKo)
+    setTakeaways(fallback.takeaways)
+    setLoading(false)
+  }, [paper.arxivId, paper.title, paper.abstract])
+
+  const baseStyle: CSSProperties = {
     fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
   }
 
@@ -104,8 +64,6 @@ export default function PaperDetail({
       background: 'linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)',
       boxSizing: 'border-box',
     }}>
-      
-
       {/* Back button */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '20px 48px 0' }}>
         <button
@@ -124,7 +82,7 @@ export default function PaperDetail({
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M19 12H5M12 5l-7 7 7 7"/>
+            <path d="M19 12H5M12 5l-7 7 7 7" />
           </svg>
           논문 목록으로
         </button>
@@ -141,10 +99,15 @@ export default function PaperDetail({
             {/* 중요도 */}
             <MetaCard label="중요도">
               <div style={{ display: 'flex', gap: '3px' }}>
-                {[1,2,3,4,5].map(i => (
-                  <svg key={i} width="16" height="16" viewBox="0 0 24 24"
-                    fill={i <= importance ? '#3B6FE8' : '#e5e7eb'}>
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                {[1, 2, 3, 4, 5].map(i => (
+                  <svg
+                    key={i}
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill={i <= importance ? '#3B6FE8' : '#e5e7eb'}
+                  >
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
                 ))}
               </div>
@@ -153,22 +116,34 @@ export default function PaperDetail({
             {/* DOI */}
             <MetaCard label="DOI #">
               <span style={{ fontSize: '11px', color: '#6b7280', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                10.1038/s41592-019-0648-2
+                {doiText}
               </span>
             </MetaCard>
 
             {/* 태그 */}
             <MetaCard label="태그">
               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {paper.chips.map(chip => (
-                  <span key={chip} style={{
-                    fontSize: '11px', padding: '2px 8px',
-                    background: '#EEF3FF', color: '#3B6FE8',
-                    borderRadius: '20px', border: '1px solid #c7d7fb',
-                  }}>
-                    {chip}
+                {chips.length > 0 ? (
+                  chips.map(chip => (
+                    <span
+                      key={chip}
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        background: '#EEF3FF',
+                        color: '#3B6FE8',
+                        borderRadius: '20px',
+                        border: '1px solid #c7d7fb',
+                      }}
+                    >
+                      {chip}
+                    </span>
+                  ))
+                ) : (
+                  <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                    태그 없음
                   </span>
-                ))}
+                )}
               </div>
             </MetaCard>
           </div>
@@ -184,26 +159,41 @@ export default function PaperDetail({
             }}>
               {paper.title}
             </h1>
+
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
-              발행연도 &nbsp;<strong style={{ color: '#374151' }}>{paper.year}</strong>
+              발행연도 &nbsp;<strong style={{ color: '#374151' }}>{year}</strong>
             </p>
+
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
-              저자 &nbsp;<strong style={{ color: '#374151' }}>저자명 외</strong>
+              저자 &nbsp;<strong style={{ color: '#374151' }}>{authorsText}</strong>
             </p>
+
             <div style={{ display: 'flex', gap: '8px' }}>
               <IconBtn onClick={() => setBookmarked(b => !b)} active={bookmarked}>
-                <svg width="15" height="15" viewBox="0 0 24 24"
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
                   fill={bookmarked ? '#3B6FE8' : 'none'}
                   stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
-                  strokeWidth="2" strokeLinecap="round">
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                 </svg>
               </IconBtn>
-              <IconBtn onClick={() => {}}>
+
+              <IconBtn onClick={() => {
+                if (paper.pdfUrl) {
+                  window.open(paper.pdfUrl, '_blank')
+                }
+              }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
-                  <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                 </svg>
               </IconBtn>
             </div>
@@ -230,13 +220,18 @@ export default function PaperDetail({
         <Section title="Abstract">
           <div style={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', background: '#fff' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>EN</div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>
+                EN
+              </div>
               <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7, margin: 0 }}>
-                {paper.summary}
+                {paper.abstract || 'Abstract 정보가 없습니다.'}
               </p>
             </div>
+
             <div style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>KO</div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>
+                KO
+              </div>
               <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7, margin: 0, minHeight: '40px' }}>
                 {loading ? <Skeleton /> : abstractKo}
               </p>
@@ -247,18 +242,30 @@ export default function PaperDetail({
         {/* Key Takeaways */}
         <Section title="Key Takeaways">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {(['what', 'how', 'soWhat'] as const).map((key) => {
+            {(['what', 'how', 'soWhat'] as const).map(key => {
               const labels = { what: 'What', how: 'How', soWhat: 'So What' }
+
               return (
-                <div key={key} style={{
-                  borderRadius: '12px',
-                  border: '1px solid #e5e7eb',
-                  padding: '14px 18px',
-                  background: '#fff',
-                }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div
+                  key={key}
+                  style={{
+                    borderRadius: '12px',
+                    border: '1px solid #e5e7eb',
+                    padding: '14px 18px',
+                    background: '#fff',
+                  }}
+                >
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#9ca3af',
+                    marginBottom: '6px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}>
                     {labels[key]}
                   </div>
+
                   <div style={{
                     fontSize: '13px',
                     color: '#374151',
@@ -281,10 +288,13 @@ export default function PaperDetail({
 
         {/* 최근 동향 논문 */}
         <div>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a1a1a', marginBottom: '16px' }}>최근 동향 논문</h2>
+          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a1a1a', marginBottom: '16px' }}>
+            최근 동향 논문
+          </h2>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
             {relatedPapers.map(rp => (
-              <RelatedCard key={rp.id} paper={rp} />
+              <RelatedCard key={rp.arxivId} paper={rp} />
             ))}
           </div>
         </div>
@@ -293,7 +303,7 @@ export default function PaperDetail({
   )
 }
 
-function MetaCard({ label, children }: { label: string; children: React.ReactNode }) {
+function MetaCard({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div style={{
       background: '#fff',
@@ -301,31 +311,46 @@ function MetaCard({ label, children }: { label: string; children: React.ReactNod
       padding: '10px 12px',
       border: '1px solid #e5e7eb',
     }}>
-      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{label}</div>
+      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>
+        {label}
+      </div>
       {children}
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={{ marginBottom: '20px' }}>
-      <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a', marginBottom: '10px' }}>{title}</h3>
+      <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a', marginBottom: '10px' }}>
+        {title}
+      </h3>
       {children}
     </div>
   )
 }
 
-function IconBtn({ onClick, children, active }: { onClick: () => void; children: React.ReactNode; active?: boolean }) {
+function IconBtn({
+  onClick,
+  children,
+  active,
+}: {
+  onClick: () => void
+  children: ReactNode
+  active?: boolean
+}) {
   return (
     <button
       onClick={onClick}
       style={{
-        width: '32px', height: '32px',
+        width: '32px',
+        height: '32px',
         borderRadius: '8px',
         border: `1px solid ${active ? '#c7d7fb' : '#e5e7eb'}`,
         background: active ? '#EEF3FF' : '#fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         cursor: 'pointer',
       }}
     >
@@ -343,58 +368,146 @@ function Skeleton() {
       borderRadius: '6px',
       animation: 'shimmer 1.5s infinite',
     }}>
-      <style>{`@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+      <style>
+        {`@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}
+      </style>
     </div>
   )
 }
 
 function RelatedCard({ paper }: { paper: Paper }) {
+  const year = getYear(paper.publishedDate)
+  const chips = getFieldNames(paper)
+  const tag = chips[0] ?? '분야 없음'
+
   return (
-    <div style={{
-      background: '#fff',
-      borderRadius: '12px',
-      padding: '14px',
-      border: '1px solid #e5e7eb',
-      cursor: 'pointer',
-      transition: 'box-shadow 0.2s',
-    }}
-    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(59,111,232,0.1)' }}
-    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
+    <div
+      style={{
+        background: '#fff',
+        borderRadius: '12px',
+        padding: '14px',
+        border: '1px solid #e5e7eb',
+        cursor: 'pointer',
+        transition: 'box-shadow 0.2s',
+      }}
+      onMouseEnter={e => {
+        ;(e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(59,111,232,0.1)'
+      }}
+      onMouseLeave={e => {
+        ;(e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
+      }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
         <span style={{
-          fontSize: '11px', padding: '2px 8px',
-          background: '#f3f4f6', color: '#6b7280',
+          fontSize: '11px',
+          padding: '2px 8px',
+          background: '#f3f4f6',
+          color: '#6b7280',
           borderRadius: '6px',
         }}>
-          {paper.tag}
+          {tag}
         </span>
+
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
         </svg>
       </div>
-      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>{paper.year}</div>
+
+      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
+        {year}
+      </div>
+
       <p style={{
-        fontSize: '12px', fontWeight: 600, color: '#1a1a1a',
-        lineHeight: 1.5, margin: '0 0 8px',
+        fontSize: '12px',
+        fontWeight: 600,
+        color: '#1a1a1a',
+        lineHeight: 1.5,
+        margin: '0 0 8px',
         display: '-webkit-box',
         WebkitLineClamp: 4,
         WebkitBoxOrient: 'vertical',
         overflow: 'hidden',
-      } as React.CSSProperties}>
+      } as CSSProperties}>
         {paper.title}
       </p>
+
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-        {paper.chips.map(chip => (
-          <span key={chip} style={{
-            fontSize: '10px', padding: '2px 6px',
-            background: '#EEF3FF', color: '#3B6FE8',
-            borderRadius: '20px',
-          }}>
+        {chips.map(chip => (
+          <span
+            key={chip}
+            style={{
+              fontSize: '10px',
+              padding: '2px 6px',
+              background: '#EEF3FF',
+              color: '#3B6FE8',
+              borderRadius: '20px',
+            }}
+          >
             {chip}
           </span>
         ))}
       </div>
     </div>
   )
+}
+
+function getYear(date?: string) {
+  if (!date) return '연도 정보 없음'
+  return date.slice(0, 4)
+}
+
+function getFieldNames(paper: Paper) {
+  return paper.researchFields?.map(field => field.name).filter(Boolean) ?? []
+}
+
+function getAuthorsText(paper: Paper) {
+  const authors = paper.authors?.map(author => author.name).filter(Boolean) ?? []
+
+  if (authors.length === 0) return '저자 정보 없음'
+  if (authors.length <= 3) return authors.join(', ')
+
+  return `${authors.slice(0, 3).join(', ')} 외 ${authors.length - 3}명`
+}
+
+function clampStarTier(value?: number) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 3
+  return Math.max(1, Math.min(5, Math.round(value)))
+}
+
+function buildFallbackAIContent(paper: Paper) {
+  const abstract = paper.abstract?.trim()
+  const title = paper.title?.trim()
+
+  const firstSentence = abstract
+    ? abstract.split(/(?<=[.!?])\s+/)[0]
+    : ''
+
+  return {
+    aiSummary: firstSentence
+      ? truncate(firstSentence, 140)
+      : `${title}에 대한 핵심 내용을 확인할 수 있는 논문입니다.`,
+
+    abstractKo: abstract
+      ? '번역 API 연결 전이므로 현재는 원문 Abstract를 기준으로 내용을 확인하세요.'
+      : 'Abstract 정보가 없습니다.',
+
+    takeaways: {
+      what: title
+        ? `"${truncate(title, 80)}" 주제를 중심으로 한 연구입니다.`
+        : '이 논문이 다루는 주제 정보를 불러오지 못했습니다.',
+
+      how: abstract
+        ? '논문의 Abstract를 기반으로 문제 정의, 접근 방식, 실험 또는 분석 내용을 확인할 수 있습니다.'
+        : '방법론 정보가 아직 제공되지 않았습니다.',
+
+      soWhat: paper.citationCount || paper.influenceScore
+        ? `인용수 ${paper.citationCount ?? 0}, 영향도 ${paper.influenceScore ?? 0} 정보를 함께 참고해 중요도를 판단할 수 있습니다.`
+        : '관련 분야의 흐름을 파악하는 데 참고할 수 있는 논문입니다.',
+    },
+  }
+}
+
+function truncate(text: string, maxLength: number) {
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength).trim()}...`
 }
