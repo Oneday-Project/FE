@@ -14,7 +14,12 @@ const keyToPath: Record<string, string> = {
   roadmap: '/roadmap',
   community: '/community',
   login: '/login',
+  mypage: '/mypage',
 }
+
+// 임시 로그인 상태 (백 연동 전)
+const mockLoggedIn = true
+const mockUserName = 'wnnye'
 
 export default function Navbar() {
   const navigate = useNavigate()
@@ -73,14 +78,32 @@ export default function Navbar() {
         ))}
       </ul>
 
-      {/* 로그인 */}
+      {/* 로그인 / 프로필 */}
       <div style={{ textAlign: 'right' }}>
-        <span
-          onClick={() => navigate('/login')}
-          style={{ cursor: 'pointer' }}
-        >
-          로그인 / 회원가입
-        </span>
+        {mockLoggedIn ? (
+          <span
+            onClick={() => navigate('/mypage')}
+            style={{
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              color: location.pathname === '/mypage' ? '#3B6FE8' : '#374151',
+            }}
+          >
+            {mockUserName}님
+          </span>
+        ) : (
+          <span
+            onClick={() => navigate('/login')}
+            style={{
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#6b7280',
+            }}
+          >
+            로그인 / 회원가입
+          </span>
+        )}
       </div>
     </nav>
   )
