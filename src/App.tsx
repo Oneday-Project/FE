@@ -6,6 +6,7 @@ import LoginPage from './pages/login'
 import Community from './pages/Community'
 import Papers from './pages/Papers'
 import Roadmap from './pages/Roadmap'
+import MyPage from './pages/mypage'
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
                 <Route path="/papers" element={<Papers />} />
                 <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/community" element={<Community />} />
+                <Route path="/mypage" element={<MyPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </div>
