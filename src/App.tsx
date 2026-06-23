@@ -7,7 +7,10 @@ import Community from './pages/Community'
 import Papers from './pages/Papers'
 import Roadmap from './pages/Roadmap'
 import MyPage from './pages/Mypage'
-import RoadmapResult from "./pages/RoadmapResult";
+import RoadmapResult from "./pages/RoadmapResult"
+import About from './pages/About'
+
+const BRAND = '#00178E'
 
 function App() {
   return (
@@ -29,6 +32,7 @@ function App() {
             <div style={{ flex: 1, minHeight: '100vh' }}>
               <Routes>
                 <Route path="/" element={<MainPage />} />
+                <Route path="/about" element={<About />} />
                 <Route path="/papers" element={<Papers />} />
                 <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/roadmap-result" element={<RoadmapResult />} />
@@ -47,7 +51,7 @@ function App() {
 
 function MainPage() {
 
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
 
   return (
     <div style={{
@@ -94,10 +98,10 @@ function MainPage() {
         width: 'fit-content'
       }}>
         <button
-          onClick={() => navigate('/login')}  
+          onClick={() => navigate('/login')}
           style={{
             padding: '13px 28px',
-            background: '#3B6FE8',
+            background: BRAND,
             color: '#fff',
             border: 'none',
             borderRadius: '10px',
@@ -112,6 +116,7 @@ function MainPage() {
           color: '#adb5bd',
           border: 'none',
           borderRadius: '10px',
+          cursor: 'pointer',
         }}>
           로드맵 수정하러 가기
         </button>
