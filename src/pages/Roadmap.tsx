@@ -16,10 +16,10 @@ type Answers = {
   [key: string]: string | string[];
 };
 
-/* 멀티 선택에서 배타 처리할 옵션 ("없음" 누르면 나머지 해제) */
-const EXCLUSIVE = "없음";
+/* 멀티 선택에서 배타 처리할 옵션들 ("없음" 계열 누르면 나머지 해제) */
+const EXCLUSIVE_OPTIONS = ["없음", "아직 아무 것도 없어요"];
 
-/* 질문 데이터 (변경 없음) */
+/* 질문 데이터 */
 const questions: Question[] = [
   {
     id: "q1",
@@ -31,7 +31,7 @@ const questions: Question[] = [
     id: "q2",
     type: "multi",
     title: "Q2. 관심분야를 선택해주세요 (최대 3개까지 선택 가능)",
-    options: ["BCI", "Bio", "CV", "Generative AI", "GNN", "HCI", "LLM", "Multimodal", "NLP", "RL", "Robotics", "UI/UX", "XAI"],
+    options: ["SML", "ML", "CV", "NLP", "Robotics", "Retrieval AI", "HCI", "Multimodal", "Code AI"],
   },
 
   { type: "section", label: "전공 및 연구 준비도" },
@@ -39,7 +39,7 @@ const questions: Question[] = [
   {
     id: "q3",
     type: "single",
-    title: "Q3. 선택한 관심 분야에 대해 어느 정도 이해하고 있나요?",
+    title: "Q3. 선택한 관심 분야 중 가장 자신 있는 분야를 기준으로 현재 이해 수준은 어느 정도인가요?",
     options: ["아직 관심 분야가 없어요.", "개념을 조금 들어봤어요.", "기본 개념은 알고 있어요.", "꽤 익숙하고 설명할 수 있어요.", "프로젝트/공부를 많이 해서 자신 있어요."],
   },
   {
@@ -56,23 +56,23 @@ const questions: Question[] = [
 
   { type: "section", label: "논문 역량" },
 
-  { id: "q7", type: "single", title: "Q7. 한 달에 논문을 몇 편 읽나요?", options: ["0회", "1~3회", "4~6회", "6~9회", "10회 이상"] },
+  { id: "q7", type: "single", title: "Q7. 한 달에 논문을 몇 편 정도 읽나요? (요약/정리 포함 여부 무관)", options: ["없음", "1~3편", "4~10편", "11~20편", "20편 이상"] },
   {
     id: "q8",
     type: "single",
-    title: "Q8. 논문 이해 수준은?",
-    options: ["거의 이해 못함", "요약만 가능", "대부분 이해", "정리 가능", "발표 가능"],
+    title: "Q8. 논문을 읽고 핵심 내용을 이해하는 수준은 어느 정도인가요?",
+    options: ["거의 이해하지 못해요.", "요약만 이해할 수 있어요.", "거의 이해할 수 있어요.", "정리 및 요약이 가능해요.", "완벽히 이해하고 발표할 수 있어요."],
   },
 
   { type: "section", label: "대외 활동 (복수 선택)" },
 
-  { id: "q9", type: "multi", title: "Q9. 준비된 항목 선택", options: ["없음", "자격증", "Notion", "CV", "영어 성적"] },
-  { id: "q10", type: "multi", title: "Q10. 발표 경험", options: ["없음", "수업", "동아리", "교외", "학회"] },
+  { id: "q9", type: "multi", title: "Q9. 대학원 진학을 위해 현재 준비된 항목을 모두 선택해 주세요.", options: ["아직 아무 것도 없어요", "GitHub 포트폴리오", "CV(이력서)", "연구·학습 기록용 Notion", "공인 영어 성적(TOEIC, TOEFL, OPIC 등)"] },
+  { id: "q10", type: "multi", title: "Q10. 기술 또는 연구 관련 발표 경험이 있나요?", options: ["없음", "수업 프로젝트 발표", "동아리/스터디 발표", "교내 학술 발표", "학회 발표"] },
 
   { type: "section", label: "학업 기반 역량" },
 
-  { id: "q11", type: "single", title: "Q11. 수학 이해 수준", options: ["거의 모름", "수업 수준", "개념 이해", "응용 가능", "설명 가능"] },
-  { id: "q12", type: "single", title: "Q12. 영어 논문 독해", options: ["불가", "부분 이해", "대략 이해", "문맥 이해", "완전 해석"] },
+  { id: "q11", type: "single", title: "Q11. 수학/이론 이해 수준 정도가 어떻게 되나요?", options: ["거의 이해하지 못해요.", "수업을 수강한 정도예요.", "개념을 완벽히 이해했어요.", "개념을 응용할 수 있어요.", "증명 및 이론 설명이 자유롭게 가능해요."] },
+  { id: "q12", type: "single", title: "Q12. 영어 논문 독해 능력은 어느 정도인가요?", options: ["읽을 수 있는 단어가 없어요.", "뜨문뜨문 아는 단어가 나와요.", "어느 정도 독해 가능해요.", "혼자서 문맥 이해가 가능해요.", "번역 없이도 전부 해석 가능해요."] },
 ];
 
 /* =========================================================
@@ -133,7 +133,7 @@ function Chip({ label, selected, disabled, onToggle }: { label: string; selected
 /* =========================================================
  *  선택지 레이아웃 (가운데 정렬)
  *  - Q1(8개): 4열 2행, 열 기준 채움 → 윗줄 1학기 / 아랫줄 2학기
- *  - 긴 문장형(Q3·Q4): 3열 균등
+ *  - 긴 문장형(Q3·Q4 등): 3열 균등
  *  - 짧은 보기: 가운데 모아서 flex 정렬
  * =======================================================*/
 function OptionsField({
@@ -228,10 +228,13 @@ export default function Roadmap() {
       if (current.includes(value)) {
         return { ...prev, [qid]: current.filter((v) => v !== value) };
       }
-      if (value === EXCLUSIVE) {
-        return { ...prev, [qid]: [EXCLUSIVE] };
+      // "없음" 계열 선택 → 그것만 남김
+      if (EXCLUSIVE_OPTIONS.includes(value)) {
+        return { ...prev, [qid]: [value] };
       }
-      const next = current.filter((v) => v !== EXCLUSIVE);
+      // 일반 항목 선택 → "없음" 계열 제거
+      const next = current.filter((v) => !EXCLUSIVE_OPTIONS.includes(v));
+      // q2 는 최대 3개
       if (qid === "q2" && next.length >= 3) return prev;
       return { ...prev, [qid]: [...next, value] };
     });
@@ -272,6 +275,9 @@ export default function Roadmap() {
                 <div
                   style={{
                     width: "100%",
+                    minHeight: "160px",
+                    display: "flex",
+                    flexDirection: "column",
                     padding: "18px 22px",
                     borderRadius: "16px",
                     background: "#fff",
@@ -283,16 +289,19 @@ export default function Roadmap() {
                 >
                   <p style={{ fontWeight: 700, fontSize: "15px", color: "#1e293b", marginBottom: "14px", marginTop: 0 }}>{q.title}</p>
 
-                  {q.id === "q2" ? (
-                    <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "10px" }}>
-                      {q.options.map((opt) => {
-                        const isSel = selectedArr.includes(opt);
-                        return <Chip key={opt} label={opt} selected={isSel} disabled={!isSel && selectedArr.length >= 3} onToggle={() => handleMulti(q.id, opt)} />;
-                      })}
-                    </div>
-                  ) : (
-                    <OptionsField q={q} answers={answers} onSingle={handleSingle} onMulti={handleMulti} />
-                  )}
+                  {/* 보기 영역: 남은 공간 채우고 세로 가운데 정렬 → 카드 높이 통일 */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                    {q.id === "q2" ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "10px" }}>
+                        {q.options.map((opt) => {
+                          const isSel = selectedArr.includes(opt);
+                          return <Chip key={opt} label={opt} selected={isSel} disabled={!isSel && selectedArr.length >= 3} onToggle={() => handleMulti(q.id, opt)} />;
+                        })}
+                      </div>
+                    ) : (
+                      <OptionsField q={q} answers={answers} onSingle={handleSingle} onMulti={handleMulti} />
+                    )}
+                  </div>
                 </div>
               </div>
             );

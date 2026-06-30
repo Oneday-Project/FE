@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
  *  대표색 (앞으로 색 바꿀 땐 여기 두 줄만 수정하면 됨)
  * =======================================================*/
 const BRAND = "#00178E";
-const BRAND_FILL = "rgba(0,81,215,0.22)";
+const BRAND_FILL = "rgba(0,23,142,0.22)";
 
 /* 타입 */
 type Answers = {
@@ -173,32 +173,98 @@ const sectionDesc: CSSProperties = { fontSize: "14px", fontWeight: 600, color: "
 /* =========================================================
  *  mock 데이터 (← 추후 백엔드 추천 API 응답으로 교체)
  * =======================================================*/
-type Course = { n: string; hot?: boolean };
-type YearPlan = { year: number; terms: { term: number; courses: Course[] }[] };
+/* course 테이블 한 행에 대응 (name / year_recommended / semester / description / hot)
+   hot = 추천(파랑) 여부. 백엔드에서 결정 예정, 지금은 임의로 표시 */
+type Course = {
+  name: string;
+  year: number; // year_recommended
+  semester: number; // 1 | 2
+  description: string;
+  hot?: boolean;
+};
 
-const majorRoadmap: YearPlan[] = [
-  {
-    year: 1,
-    terms: [
-      { term: 1, courses: [{ n: "프로그래밍 기초" }, { n: "미적분학" }, { n: "일반물리" }] },
-      { term: 2, courses: [{ n: "파이썬", hot: true }, { n: "이산수학" }, { n: "C언어" }, { n: "확률통계", hot: true }] },
-    ],
-  },
-  {
-    year: 2,
-    terms: [
-      { term: 1, courses: [{ n: "객체지향프로그래밍", hot: true }, { n: "선형대수학", hot: true }, { n: "자료구조", hot: true }, { n: "인터랙션디자인" }, { n: "컴퓨팅로직설계" }] },
-      { term: 2, courses: [{ n: "알고리즘", hot: true }, { n: "운영체제" }, { n: "데이터베이스" }, { n: "컴퓨터구조" }] },
-    ],
-  },
-  {
-    year: 3,
-    terms: [
-      { term: 1, courses: [{ n: "머신러닝", hot: true }, { n: "컴퓨터비전", hot: true }, { n: "신호처리" }] },
-      { term: 2, courses: [{ n: "딥러닝", hot: true }, { n: "자연어처리", hot: true }, { n: "캡스톤설계" }] },
-    ],
-  },
+/* DB 기준 mock — 추후 백엔드 응답으로 교체 */
+const courses: Course[] = [
+  { name: "파이썬", year: 1, semester: 1, hot: true, description: "파이썬 문법과 자료구조·함수·파일처리를 배우며 AI 개발 기초를 다지는 입문 과목" },
+  { name: "C프로그래밍1", year: 1, semester: 1, description: "C언어 문법과 변수·조건문·반복문·배열·포인터를 배우는 프로그래밍 입문 과목" },
+  { name: "확률통계의 이해", year: 1, semester: 2, hot: true, description: "확률분포와 통계추론, 가설검정을 배우는 AI·데이터분석 필수 수학 과목" },
+  { name: "C프로그래밍2", year: 1, semester: 2, description: "포인터·구조체·동적메모리·파일처리 등 C언어 심화 문법을 배우는 중급 과목" },
+
+  { name: "자료구조", year: 2, semester: 1, hot: true, description: "리스트, 트리, 그래프, 해시 등 데이터를 효율적으로 저장·탐색하는 구조를 배우는 과목" },
+  { name: "선형대수학", year: 2, semester: 1, hot: true, description: "행렬, 벡터, 고유값, SVD 등 AI·데이터분석의 핵심 수학 도구를 배우는 기초 과목" },
+  { name: "객체지향프로그래밍", year: 2, semester: 1, hot: true, description: "자바 언어로 클래스, 상속, 다형성 등 객체지향 개념과 프로그램 작성 기초를 배우는 과목" },
+  { name: "인터랙션디자인", year: 2, semester: 1, description: "Unity로 UI, VR·AR, 인터랙티브 콘텐츠를 제작하며 사용자 상호작용 설계를 배우는 과목" },
+  { name: "컴퓨터로직설계", year: 2, semester: 1, description: "컴퓨터가 내부에서 정보를 처리하는 논리회로 구조와 CPU 기초 동작 원리를 배우는 과목" },
+  { name: "데이터베이스", year: 2, semester: 2, description: "SQL과 DB 설계·정규화·트랜잭션을 배우며 데이터를 효율적으로 관리하는 과목" },
+  { name: "인공지능개론", year: 2, semester: 2, hot: true, description: "기계학습의 핵심 알고리즘과 딥러닝 기초를 배우는 AI 입문 과목" },
+  { name: "빅데이터분석", year: 2, semester: 2, description: "Spark와 Python으로 대용량 데이터를 수집·분석하고 기계학습까지 다루는 실습 과목" },
+
+  { name: "UX분석", year: 3, semester: 1, description: "사용자 행동과 심리를 분석해 AI 서비스의 UX를 설계·평가하는 과목" },
+  { name: "딥러닝", year: 3, semester: 1, hot: true, description: "신경망·CNN·Transformer를 배우고 생성형 AI와 LLM까지 다루는 핵심 AI 과목" },
+  { name: "AI프로세서 설계", year: 3, semester: 1, description: "FPGA와 VHDL로 AI 연산용 프로세서와 하드웨어 가속기를 설계하는 과목" },
+  { name: "디지털신호처리", year: 3, semester: 1, description: "푸리에변환과 필터링으로 음성·생체·센서 데이터를 분석하는 신호처리 핵심 과목" },
+  { name: "디지털영상처리", year: 3, semester: 1, hot: true, description: "영상 개선·분할·특징추출·압축을 배우며 컴퓨터비전 기초를 다지는 과목" },
+  { name: "감성컴퓨팅", year: 3, semester: 1, description: "표정·음성·생체신호로 감정을 인식하고 감성 AI 시스템을 구현하는 융합 과목" },
+  { name: "영상패턴인식", year: 3, semester: 2, hot: true, description: "객체 검출·추적·3D비전·장면이해 등 영상 인식 기술을 배우는 컴퓨터비전 심화 과목" },
+  { name: "피지컬컴퓨팅", year: 3, semester: 2, description: "마이크로컨트롤러로 센서·입출력 장치를 제어해 인터랙티브 시스템을 만드는 과목" },
+  { name: "신호패턴인식", year: 3, semester: 2, description: "생체신호에서 특징을 추출해 분류·예측하는 AI 기반 신호분석 과목" },
+  { name: "강화학습", year: 3, semester: 2, hot: true, description: "보상을 최대화하도록 행동을 학습하는 AI 알고리즘과 심층강화학습을 배우는 과목" },
 ];
+
+const coursesAt = (year: number, semester: number) => courses.filter((c) => c.year === year && c.semester === semester);
+
+/* 과목 칩 — 호버 시 description 말풍선 (파랑/회색 상관없이 표시) */
+function CourseChip({ course }: { course: Course }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div style={{ position: "relative", width: "fit-content" }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {hover && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 9px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "max-content",
+            maxWidth: "260px",
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 8px 22px rgba(15,23,42,0.14)",
+            borderRadius: "10px",
+            padding: "10px 14px",
+            fontSize: "12px",
+            lineHeight: 1.5,
+            color: "#475569",
+            zIndex: 30,
+          }}
+        >
+          {course.description}
+          {/* 말풍선 꼬리 */}
+          <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderTop: "7px solid #fff", filter: "drop-shadow(0 2px 1px rgba(15,23,42,0.06))" }} />
+        </div>
+      )}
+      <div
+        style={{
+          padding: "9px 14px",
+          borderRadius: "6px 18px 6px 6px",
+          fontSize: "12px",
+          fontWeight: course.hot ? 700 : 600,
+          whiteSpace: "nowrap",
+          cursor: "default",
+          color: course.hot ? "#fff" : "#475569",
+          background: course.hot
+            ? "linear-gradient(145deg, #2a45ad 0%, #00178E 58%)"
+            : "linear-gradient(145deg, #eef1f6 0%, #e2e8f0 60%)",
+          boxShadow: course.hot
+            ? "0 4px 14px rgba(0,23,142,0.30), inset 0 1px 0 rgba(255,255,255,0.22)"
+            : "0 2px 6px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
+        }}
+      >
+        {course.name}
+      </div>
+    </div>
+  );
+}
 
 type Paper = { year: number; title: string; desc: string };
 const paperRoadmap: Paper[] = [
@@ -274,36 +340,20 @@ export default function RoadmapResult() {
           <SectionCard label="전공 로드맵">
             <p style={sectionDesc}>관심 분야에 따라 추천된 전공 과목 내역입니다.</p>
             <div style={{ display: "flex", gap: "20px" }}>
-              {majorRoadmap.map((y) => (
-                <div key={y.year} style={{ flex: 1 }}>
-                  <div style={{ background: "#eef2ff", color: BRAND, borderRadius: "8px", textAlign: "center", padding: "7px 0", fontSize: "13px", fontWeight: 700, marginBottom: "12px" }}>{y.year}학년</div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    {y.terms.map((term) => (
-                      <div key={term.term} style={{ flex: 1 }}>
-                        <div style={{ fontSize: "11px", color: "#94a3b8", textAlign: "center", marginBottom: "8px", fontWeight: 600 }}>{term.term}학기</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                          {term.courses.map((c) => (
-                            <div
-                              key={c.n}
-                              title={c.n}
-                              style={{
-                                padding: "8px 6px",
-                                borderRadius: "8px",
-                                textAlign: "center",
-                                fontSize: "11.5px",
-                                fontWeight: c.hot ? 700 : 500,
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                background: c.hot ? BRAND : "#f1f5f9",
-                                color: c.hot ? "#fff" : "#64748b",
-                                border: c.hot ? "none" : "1px solid #e2e8f0",
-                              }}
-                            >
-                              {c.n}
-                            </div>
-                          ))}
-                        </div>
+              {[1, 2, 3].map((year) => (
+                <div key={year} style={{ flex: 1 }}>
+                  <div style={{ border: "1px solid #cbd5e1", borderRadius: "8px", textAlign: "center", padding: "8px 0", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "10px" }}>{year}학년</div>
+                  <div style={{ display: "flex" }}>
+                    <div style={{ flex: 1, textAlign: "center", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>1학기</div>
+                    <div style={{ flex: 1, textAlign: "center", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>2학기</div>
+                  </div>
+                  <div style={{ height: "1px", background: "#e5e7eb", margin: "8px 0 14px" }} />
+                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                    {[1, 2].map((sem) => (
+                      <div key={sem} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
+                        {coursesAt(year, sem).map((c) => (
+                          <CourseChip key={c.name} course={c} />
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -315,8 +365,9 @@ export default function RoadmapResult() {
                 <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: BRAND, display: "inline-block" }} /> 추천 과목
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: "#f1f5f9", border: "1px solid #e2e8f0", display: "inline-block" }} /> 일반 과목
+                <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: "#e2e8f0", display: "inline-block" }} /> 일반 과목
               </span>
+              <span style={{ color: "#94a3b8" }}>· 과목에 마우스를 올리면 설명이 표시됩니다</span>
             </div>
           </SectionCard>
 
@@ -324,21 +375,38 @@ export default function RoadmapResult() {
           <SectionCard label="논문 로드맵">
             <p style={sectionDesc}>선택한 관심 분야에 대한 핵심 논문 추천 결과입니다.</p>
             <div style={{ display: "flex", gap: "24px" }}>
-              {paperRoadmap.map((p, i) => (
-                <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: `3px solid ${BRAND}` }}>
-                  {tags[i] && (
-                    <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 700, marginBottom: "12px" }}>{tags[i]}</span>
-                  )}
-                  <p style={{ fontSize: "11px", color: "#94a3b8", margin: "0 0 4px" }}>{p.year}</p>
-                  <p style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.35, color: "#1e293b", margin: "0 0 10px" }}>{p.title}</p>
-                  <div style={{ height: "1px", background: "#e5e7eb", margin: "0 0 10px" }} />
-                  <p style={{ fontSize: "11.5px", color: "#64748b", lineHeight: 1.55, margin: 0 }}>{p.desc}</p>
-                </div>
-              ))}
+              {/* 관심 분야는 최대 3개 → 칸은 항상 3개, 선택한 태그 수만큼만 채움 */}
+              {[0, 1, 2].map((i) => {
+                const tag = tags[i];
+                const p = paperRoadmap[i];
+
+                // 선택 안 된 칸 → 빈 placeholder (연한 왼쪽 선 + 흐린 로고)
+                if (!tag || !p) {
+                  return (
+                    <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: "3px solid #c7d2fe", display: "flex", flexDirection: "column", minHeight: "200px" }}>
+                      <span style={{ alignSelf: "flex-start", padding: "4px 16px", borderRadius: "999px", fontSize: "13px", border: "1.5px dashed #cbd5e1", color: "#cbd5e1", fontWeight: 700, marginBottom: "12px" }}>-</span>
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <img src="/logo.svg" alt="" style={{ height: "30px", opacity: 0.2 }} />
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 선택된 칸 → 논문 카드
+                return (
+                  <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: `3px solid ${BRAND}` }}>
+                    <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 700, marginBottom: "12px" }}>{tag}</span>
+                    <p style={{ fontSize: "11px", color: "#94a3b8", margin: "0 0 4px" }}>{p.year}</p>
+                    <p style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.35, color: "#1e293b", margin: "0 0 10px" }}>{p.title}</p>
+                    <div style={{ height: "1px", background: "#e5e7eb", margin: "0 0 10px" }} />
+                    <p style={{ fontSize: "11.5px", color: "#64748b", lineHeight: 1.55, margin: 0 }}>{p.desc}</p>
+                  </div>
+                );
+              })}
             </div>
           </SectionCard>
 
-          {/* ── 성장 가이드 (신규) ── */}
+          {/* ── 성장 가이드 ── */}
           <SectionCard label="성장 가이드">
             <div style={{ display: "flex", alignItems: "stretch", gap: "18px", flexWrap: "wrap" }}>
               {/* 현재 상태 카드 2개 */}
