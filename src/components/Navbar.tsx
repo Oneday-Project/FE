@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
+const BRAND = '#00178E'
+
 const navItems = [
-  { name: '소개', key: 'main' },
+  { name: '소개', key: 'about' },
   { name: '논문', key: 'papers' },
   { name: '로드맵', key: 'roadmap' },
   { name: '커뮤니티', key: 'community' }
 ]
 
 const keyToPath: Record<string, string> = {
-  main: '/',
+  about: '/about',
   papers: '/papers',
   roadmap: '/roadmap',
   community: '/community',
@@ -25,8 +27,8 @@ export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const currentItem = navItems.find(item => location.pathname.startsWith('/' + item.key))
-  const [active, setActive] = useState(currentItem?.name ?? '논문')
+  // 현재 경로 기준으로 활성 메뉴 계산 (로고/URL 이동에도 하이라이트가 따라옴)
+  const activeName = navItems.find(item => location.pathname.startsWith(keyToPath[item.key]))?.name
   const [hovered, setHovered] = useState<string | null>(null)
 
   return (
@@ -41,9 +43,14 @@ export default function Navbar() {
       alignItems: 'center',
       padding: '0 80px',
     }}>
-      {/* 로고 */}
+      {/* 로고 → 메인 */}
       <div>
-        <img src="/logo.svg" style={{ height: '28px' }} />
+        <img
+          src="/logo.svg"
+          alt="H-AI Grad"
+          onClick={() => navigate('/')}
+          style={{ height: '28px', cursor: 'pointer' }}
+        />
       </div>
 
       {/* 메뉴 */}
@@ -51,31 +58,29 @@ export default function Navbar() {
         display: 'flex', gap: '8px',
         listStyle: 'none', margin: 0, padding: 0
       }}>
-        {navItems.map((item) => (
-          <li key={item.name}>
-            <button
-              onClick={() => {
-                setActive(item.name)
-                navigate(keyToPath[item.key])
-              }}
-              onMouseEnter={() => setHovered(item.name)}
-              onMouseLeave={() => setHovered(null)}
-              style={{
-                padding: '8px 20px',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                borderRadius: '8px',
-                color: active === item.name || hovered === item.name
-                  ? '#3B6FE8'
-                  : '#9ca3af',
-                fontWeight: active === item.name ? 600 : 400,
-              }}
-            >
-              {item.name}
-            </button>
-          </li>
-        ))}
+        {navItems.map((item) => {
+          const isActive = activeName === item.name
+          return (
+            <li key={item.name}>
+              <button
+                onClick={() => navigate(keyToPath[item.key])}
+                onMouseEnter={() => setHovered(item.name)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  padding: '8px 20px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  color: isActive || hovered === item.name ? BRAND : '#9ca3af',
+                  fontWeight: isActive ? 600 : 400,
+                }}
+              >
+                {item.name}
+              </button>
+            </li>
+          )
+        })}
       </ul>
 
       {/* 로그인 / 프로필 */}
@@ -87,7 +92,7 @@ export default function Navbar() {
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: 500,
-              color: location.pathname === '/mypage' ? '#3B6FE8' : '#374151',
+              color: location.pathname === '/mypage' ? BRAND : '#374151',
             }}
           >
             {mockUserName}님
