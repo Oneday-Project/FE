@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const mockUser = {
@@ -18,14 +18,26 @@ const mockBookmarkedPapers = [
 ]
 
 const ITEMS_PER_PAGE = 6
-const sideMenuItems = ['북마크한 논문', '로드맵 히스토리', '내가 작성한 게시물', '내가 작성한 댓글']
+const sideMenuItems = ['북마크한 논문', '읽고 있는 논문', '다 읽은 논문']
 
 export default function MyPage() {
   const navigate = useNavigate()
   const [activeMenu, setActiveMenu] = useState('프로필 수정')
   const [nickname, setNickname] = useState(mockUser.nickname)
-  const [password, setPassword] = useState('')
+  // const [password, setPassword] = useState('')  // 비밀번호 변경 기능 미사용
   const [currentPage, setCurrentPage] = useState(1)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [profileImage, setProfileImage] = useState<string | null>(null)
+
+  // 업로드 아이콘 클릭 → 숨겨진 input 열기 → 선택한 이미지 미리보기
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = () => setProfileImage(reader.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
   const [bookmarks, setBookmarks] = useState<Record<number, boolean>>(
     Object.fromEntries(mockBookmarkedPapers.map(p => [p.id, p.bookmarked]))
   )
@@ -67,7 +79,7 @@ export default function MyPage() {
             <hr style={{ border: 'none', borderTop: '1px solid #d1d5db', margin: '0 0 16px 0' }} />
 
             <div style={{ fontSize: '15px', fontWeight: 500, color: '#374151', marginBottom: '12px' }}>
-              내 활동
+              논문
             </div>
 
             {sideMenuItems.map(item => (
@@ -115,28 +127,36 @@ export default function MyPage() {
                   <div style={{ position: 'relative', flexShrink: 0 }}>
                     <div style={{
                       width: '80px', height: '80px', borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #c7d8ff 0%, #dde8ff 100%)',
+                      background: 'linear-gradient(135deg, #aeb4bd 0%, #c8ccd4 100%)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      overflow: 'hidden',
                     }}>
-                      <svg width="44" height="44" viewBox="0 0 64 64" fill="none">
-                        <circle cx="32" cy="32" r="30" fill="#c7d8ff"/>
-                        <path d="M32 18L52 26L32 34L12 26L32 18Z" fill="#7096e8"/>
-                        <path d="M20 30V42C20 42 25 48 32 48C39 48 44 42 44 42V30" stroke="#7096e8" strokeWidth="2.5" strokeLinecap="round"/>
-                        <line x1="52" y1="26" x2="52" y2="38" stroke="#7096e8" strokeWidth="2.5" strokeLinecap="round"/>
-                        <circle cx="52" cy="39" r="2" fill="#7096e8"/>
-                      </svg>
+                      {profileImage ? (
+                        <img src={profileImage} alt="프로필" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <img
+                          src="/tabler_compass.svg"
+                          alt="프로필"
+                          style={{ width: '48px', height: '48px', filter: 'brightness(0) invert(1)' }}
+                        />
+                      )}
                     </div>
-                    <div style={{
-                      position: 'absolute', bottom: 0, right: 0,
-                      width: '24px', height: '24px', borderRadius: '50%',
-                      background: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      border: '2px solid #fff', cursor: 'pointer',
-                    }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                      </svg>
-                    </div>
+                    <img
+                      src="/mdi_upload-circle.svg"
+                      alt="이미지 업로드"
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{
+                        position: 'absolute', bottom: 0, right: 0,
+                        width: '24px', height: '24px', cursor: 'pointer',
+                      }}
+                    />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      style={{ display: 'none' }}
+                    />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                     <span style={{ fontSize: '15px', color: '#6b7280' }}>이름</span>
@@ -162,6 +182,7 @@ export default function MyPage() {
                     <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>이메일</span>
                     <span style={{ fontSize: '14px', color: '#9ca3af' }}>{mockUser.email}</span>
                   </div>
+                  {/* 비밀번호 변경 기능 미사용 — 회원가입 시 설정한 비밀번호로만 로그인 (필요 시 주석 해제)
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>비밀번호</span>
                     <input
@@ -177,12 +198,13 @@ export default function MyPage() {
                     />
                     <button style={{
                       padding: '12px 20px', fontSize: '14px', fontWeight: 500,
-                      background: '#3B6FE8', color: '#fff', border: 'none',
+                      background: '#1e3a8a', color: '#fff', border: 'none',
                       borderRadius: '10px', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                     }}>
                       비밀번호 변경
                     </button>
                   </div>
+                  */}
                 </div>
               </div>
             )}
