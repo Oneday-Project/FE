@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
+import { calculateScores, type Answers } from "./roadmap";
 
 /* =========================================================
  *  대표색 (앞으로 색 바꿀 땐 여기 두 줄만 수정하면 됨)
@@ -7,73 +8,15 @@ import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
 const BRAND = "#00178E";
 const BRAND_FILL = "rgba(0,23,142,0.22)";
 
-/* 타입 */
-type Answers = {
-  [key: string]: string | string[];
-};
+/* 점수 계산/타입은 ./roadmap 으로 분리 (fast refresh 경고 방지) */
 
-/* =========================================================
- *  점수 계산 (기존 로직 유지, 맵 타입만 안전하게 보강)
- * =======================================================*/
-function calculateScores(answers: Answers) {
-  const safe = (v: number | undefined) => v || 0;
-  const pick = (map: Record<string, number>, key: unknown) =>
-    safe(map[key as string]);
-
-  const q3Map: Record<string, number> = {
-    "아직 관심 분야가 없어요.": 0,
-    "개념을 조금 들어봤어요.": 2.5,
-    "기본 개념은 알고 있어요.": 5,
-    "꽤 익숙하고 설명할 수 있어요.": 7.5,
-    "프로젝트/공부를 많이 해서 자신 있어요.": 10,
-  };
-  const q4Map: Record<string, number> = {
-    "아직 정하지 못했어요.": 0,
-    "대략적인 분야만 있어요.": 2.5,
-    "세부 키워드까지 정했어요.": 5,
-    "전체적인 내용을 구성했어요.": 7.5,
-    "구체적인 연구 주제와 방향이 있어요.": 10,
-  };
-  const prep = pick(q3Map, answers.q3) + pick(q4Map, answers.q4);
-
-  const q5Map: Record<string, number> = { "0회": 0, "1~3회": 2.5, "3~5회": 5, "5~8회": 7.5, "10회 이상": 10 };
-  const q6Map: Record<string, number> = { "없음": 0, "3개월 이하": 2.5, "3~6개월": 5, "6개월~1년": 7.5, "1년 이상": 10 };
-  const exp = pick(q5Map, answers.q5) + pick(q6Map, answers.q6);
-
-  const q7Map: Record<string, number> = { "0회": 0, "1~3회": 2.5, "4~6회": 5, "6~9회": 7.5, "10회 이상": 10 };
-  const q8Map: Record<string, number> = {
-    "거의 이해 못함": 0, "요약만 가능": 2.5, "대부분 이해": 5, "정리 가능": 7.5, "발표 가능": 10,
-  };
-  const paper = pick(q7Map, answers.q7) + pick(q8Map, answers.q8);
-
-  const q9Count = Array.isArray(answers.q9) ? answers.q9.length : 0;
-  const q10Count = Array.isArray(answers.q10) ? answers.q10.length : 0;
-  const portfolio = Math.min((q9Count + q10Count) * 2.5, 20);
-
-  const q11Map: Record<string, number> = {
-    "거의 모름": 0, "수업 수준": 2.5, "개념 이해": 5, "응용 가능": 7.5, "설명 가능": 10,
-  };
-  const q12Map: Record<string, number> = {
-    "불가": 0, "부분 이해": 2.5, "대략 이해": 5, "문맥 이해": 7.5, "완전 해석": 10,
-  };
-  const study = pick(q11Map, answers.q11) + pick(q12Map, answers.q12);
-
-  return {
-    prep,
-    exp,
-    paper,
-    portfolio,
-    study,
-    total: Math.round(prep + exp + paper + portfolio + study),
-  };
-}
 
 /* =========================================================
  *  방사형 그래프
  *  - 라벨을 각도 기반으로 자동 정렬(start/middle/end) → 잘림 없앰
  *  - requestAnimationFrame 으로 0→1 보간 → scale 꼼수 제거
  * =======================================================*/
-function RadarChart({
+export function RadarChart({
   values,
   labels,
   max = 20,

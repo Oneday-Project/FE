@@ -5,6 +5,7 @@ import Footer from './components/Footer'
 import LoginPage from './pages/login'
 import Community from './pages/Community'
 import Papers from './pages/Papers'
+import Main from './pages/Main'
 import RoadmapHome from './pages/RoadmapHome'
 import Roadmap from './pages/Roadmap'
 import MyPage from './pages/Mypage'
@@ -30,7 +31,7 @@ function App() {
             <Navbar />
             <div style={{ flex: 1, minHeight: '100vh' }}>
               <Routes>
-                <Route path="/" element={<MainPage />} />
+                <Route path="/" element={<Main />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/papers" element={<Papers />} />
 
@@ -48,20 +49,6 @@ function App() {
           </>
         } />
       </Routes>
-    </div>
-  )
-}
-
-/* 임시 홈 — 다음 단계에서 배너/공지/캘린더로 제작 예정 */
-function MainPage() {
-  return (
-    <div style={{ padding: '100px 80px' }}>
-      <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#1a1a1a', marginBottom: '12px' }}>
-        H-AI Grad
-      </h1>
-      <p style={{ fontSize: '15px', color: '#6b7280' }}>
-        메인 홈은 다음 단계에서 제작할 예정입니다.
-      </p>
     </div>
   )
 }
