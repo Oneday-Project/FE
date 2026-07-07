@@ -1,16 +1,15 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 
 import LoginPage from './pages/login'
 import Community from './pages/Community'
 import Papers from './pages/Papers'
+import RoadmapHome from './pages/RoadmapHome'
 import Roadmap from './pages/Roadmap'
 import MyPage from './pages/Mypage'
 import RoadmapResult from "./pages/RoadmapResult"
 import About from './pages/About'
-
-const BRAND = '#00178E'
 
 function App() {
   return (
@@ -34,8 +33,12 @@ function App() {
                 <Route path="/" element={<MainPage />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/papers" element={<Papers />} />
-                <Route path="/roadmap" element={<Roadmap />} />
+
+                {/* 로드맵: 랜딩(버튼 2개) → 질문 → 결과 */}
+                <Route path="/roadmap" element={<RoadmapHome />} />
+                <Route path="/roadmap/create" element={<Roadmap />} />
                 <Route path="/roadmap-result" element={<RoadmapResult />} />
+
                 <Route path="/community" element={<Community />} />
                 <Route path="/mypage" element={<MyPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
@@ -49,78 +52,16 @@ function App() {
   )
 }
 
+/* 임시 홈 — 다음 단계에서 배너/공지/캘린더로 제작 예정 */
 function MainPage() {
-
-  const navigate = useNavigate();
-
   return (
-    <div style={{
-      position: 'relative',
-      width: '100%',
-      padding: '100px 80px',
-    }}>
-      <img
-        src="/bg-icon.png"
-        alt=""
-        style={{
-          position: 'absolute',
-          right: '-40px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          width: '520px',
-          opacity: 0.2,
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}
-      />
-
-      <h1 style={{
-        fontSize: '30px',
-        fontWeight: 700,
-        color: '#1a1a1a',
-        marginBottom: '12px'
-      }}>
-        내 로드맵, 지금 생성하기
+    <div style={{ padding: '100px 80px' }}>
+      <h1 style={{ fontSize: '30px', fontWeight: 700, color: '#1a1a1a', marginBottom: '12px' }}>
+        H-AI Grad
       </h1>
-
-      <p style={{
-        fontSize: '15px',
-        color: '#6b7280',
-        marginBottom: '32px'
-      }}>
-        전공·논문·준비 액션을 한 플랜으로 정리해드려요.
+      <p style={{ fontSize: '15px', color: '#6b7280' }}>
+        메인 홈은 다음 단계에서 제작할 예정입니다.
       </p>
-
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        width: 'fit-content'
-      }}>
-        <button
-          onClick={() => navigate('/login')}
-          style={{
-            padding: '13px 28px',
-            background: BRAND,
-            color: '#fff',
-            border: 'none',
-            borderRadius: '10px',
-            cursor: 'pointer',
-          }}>
-          로드맵 생성하러 가기
-        </button>
-
-        <button style={{
-          padding: '13px 28px',
-          background: '#e9ecef',
-          color: '#adb5bd',
-          border: 'none',
-          borderRadius: '10px',
-          cursor: 'pointer',
-        }}>
-          로드맵 수정하러 가기
-        </button>
-      </div>
     </div>
   )
 }
