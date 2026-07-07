@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { isLoggedIn as readLoginState, fetchMe } from '../lib/auth'
 
 const BRAND = '#00178E'
 
@@ -19,13 +20,33 @@ const keyToPath: Record<string, string> = {
   mypage: '/mypage',
 }
 
-// 임시 로그인 상태 (백 연동 전)
-const mockLoggedIn = true
-const mockUserName = 'wnnye'
-
 export default function Navbar() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // 로그인 상태 + 현재 사용자 닉네임 — 로그인/로그아웃 시 실시간 갱신
+  const [isLoggedIn, setIsLoggedIn] = useState(readLoginState)
+  const [nickname, setNickname] = useState('')
+
+  useEffect(() => {
+    const sync = () => {
+      const logged = readLoginState()
+      setIsLoggedIn(logged)
+      if (logged) {
+        // 로그인 상태면 /users/me 에서 실제 닉네임을 받아와 표시
+        fetchMe().then(me => setNickname(me?.nickname ?? ''))
+      } else {
+        setNickname('')
+      }
+    }
+    sync() // 최초 로드 시에도 사용자 정보 조회
+    window.addEventListener('auth-change', sync)  // 같은 탭에서 로그아웃/로그인
+    window.addEventListener('storage', sync)       // 다른 탭과 동기화
+    return () => {
+      window.removeEventListener('auth-change', sync)
+      window.removeEventListener('storage', sync)
+    }
+  }, [])
 
   // 현재 경로 기준으로 활성 메뉴 계산 (로고/URL 이동에도 하이라이트가 따라옴)
   const activeName = navItems.find(item => location.pathname.startsWith(keyToPath[item.key]))?.name
@@ -85,7 +106,7 @@ export default function Navbar() {
 
       {/* 로그인 / 프로필 */}
       <div style={{ textAlign: 'right' }}>
-        {mockLoggedIn ? (
+        {isLoggedIn ? (
           <span
             onClick={() => navigate('/mypage')}
             style={{
@@ -95,7 +116,7 @@ export default function Navbar() {
               color: location.pathname === '/mypage' ? BRAND : '#374151',
             }}
           >
-            {mockUserName}님
+            {nickname || '회원'}님
           </span>
         ) : (
           <span
