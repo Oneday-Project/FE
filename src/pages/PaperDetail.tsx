@@ -11,6 +11,7 @@ export default function PaperDetail({
   onBack: () => void
 }) {
   const [bookmarked, setBookmarked] = useState(paper.bookmarkCount > 0)
+  const [readStatus, setReadStatus] = useState<'reading' | 'done' | null>(null) // 읽는 중 / 읽기 완료 (하나만, 미선택 가능)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [abstractKo, setAbstractKo] = useState<string | null>(null)
   const [takeaways, setTakeaways] = useState<{ what: string; how: string; soWhat: string } | null>(null)
@@ -91,103 +92,37 @@ export default function PaperDetail({
       {/* Main content */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '12px 48px 64px' }}>
 
-        {/* Meta + Title row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '20px', marginBottom: '28px', alignItems: 'start' }}>
+        {/* Title(왼쪽) + Meta 알약(오른쪽) */}
+        <div style={{ display: 'flex', gap: '28px', marginBottom: '36px', alignItems: 'flex-start' }}>
 
-          {/* Left meta */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {/* 중요도 */}
-            <MetaCard label="중요도">
-              <div style={{ display: 'flex', gap: '3px' }}>
-                {[1, 2, 3, 4, 5].map(i => (
-                  <svg
-                    key={i}
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill={i <= importance ? '#3B6FE8' : '#e5e7eb'}
-                  >
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                ))}
-              </div>
-            </MetaCard>
-
-            {/* DOI */}
-            <MetaCard label="DOI #">
-              <span style={{ fontSize: '11px', color: '#6b7280', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {doiText}
-              </span>
-            </MetaCard>
-
-            {/* 태그 */}
-            <MetaCard label="태그">
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {chips.length > 0 ? (
-                  chips.map(chip => (
-                    <span
-                      key={chip}
-                      style={{
-                        fontSize: '11px',
-                        padding: '2px 8px',
-                        background: '#EEF3FF',
-                        color: '#3B6FE8',
-                        borderRadius: '20px',
-                        border: '1px solid #c7d7fb',
-                      }}
-                    >
-                      {chip}
-                    </span>
-                  ))
-                ) : (
-                  <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                    태그 없음
-                  </span>
-                )}
-              </div>
-            </MetaCard>
-          </div>
-
-          {/* Right: title + author */}
-          <div>
+          {/* Left: 제목 · 저자 · 액션 */}
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{
-              fontSize: '20px',
-              fontWeight: 700,
-              color: '#1a1a1a',
-              lineHeight: 1.45,
-              marginBottom: '10px',
+              fontSize: '22px', fontWeight: 800, color: '#1a1a1a',
+              lineHeight: 1.4, marginBottom: '14px',
             }}>
               {paper.title}
             </h1>
 
-            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
-              발행연도 &nbsp;<strong style={{ color: '#374151' }}>{year}</strong>
+            <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '4px' }}>
+              발행연도 &nbsp;<strong style={{ color: '#6b7280', fontWeight: 600 }}>{year}</strong>
+            </p>
+            <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '14px' }}>
+              저자 &nbsp;<strong style={{ color: '#6b7280', fontWeight: 600 }}>{authorsText}</strong>
             </p>
 
-            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>
-              저자 &nbsp;<strong style={{ color: '#374151' }}>{authorsText}</strong>
-            </p>
-
-            <div style={{ display: 'flex', gap: '8px' }}>
+            {/* 북마크 / 링크 */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
               <IconBtn onClick={() => setBookmarked(b => !b)} active={bookmarked}>
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
+                <svg width="15" height="15" viewBox="0 0 24 24"
                   fill={bookmarked ? '#3B6FE8' : 'none'}
                   stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
+                  strokeWidth="2" strokeLinecap="round">
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                 </svg>
               </IconBtn>
 
-              <IconBtn onClick={() => {
-                if (paper.pdfUrl) {
-                  window.open(paper.pdfUrl, '_blank')
-                }
-              }}>
+              <IconBtn onClick={() => { if (paper.pdfUrl) window.open(paper.pdfUrl, '_blank') }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
                   <circle cx="18" cy="5" r="3" />
                   <circle cx="6" cy="12" r="3" />
@@ -197,86 +132,119 @@ export default function PaperDetail({
                 </svg>
               </IconBtn>
             </div>
+
+            {/* 읽는 중 / 읽기 완료 — 하나만 선택 (다시 누르면 해제) */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <ReadStatusBtn
+                active={readStatus === 'reading'}
+                onClick={() => setReadStatus(s => (s === 'reading' ? null : 'reading'))}
+                activeColor="#15803D" activeBg="#E7F6EC" activeBorder="#22C55E"
+                icon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" />
+                  </svg>
+                }
+              >
+                읽는 중
+              </ReadStatusBtn>
+              <ReadStatusBtn
+                active={readStatus === 'done'}
+                onClick={() => setReadStatus(s => (s === 'done' ? null : 'done'))}
+                activeColor="#B45309" activeBg="#FEF3C7" activeBorder="#FBBF24"
+              >
+                읽기 완료
+              </ReadStatusBtn>
+            </div>
+          </div>
+
+          {/* Right: 메타 알약 (중요도 · 태그 · DOI) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '236px', flexShrink: 0 }}>
+            {/* 중요도 */}
+            <MetaPill label="중요도" icon={
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+            }>
+              <div style={{ display: 'flex', gap: '2px' }}>
+                {Array.from({ length: importance }).map((_, i) => (
+                  <svg key={i} width="15" height="15" viewBox="0 0 24 24" fill="#FBBF24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ))}
+              </div>
+            </MetaPill>
+
+            {/* 태그 */}
+            <MetaPill label="태그" icon={
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                <line x1="7" y1="7" x2="7.01" y2="7" />
+              </svg>
+            }>
+              {chips.length > 0 ? (
+                chips.map(chip => (
+                  <span key={chip} style={{
+                    fontSize: '10px', padding: '2px 8px', background: '#fff',
+                    color: '#3B6FE8', borderRadius: '20px', border: '1px solid #c7d7fb',
+                  }}>{chip}</span>
+                ))
+              ) : (
+                <span style={{ fontSize: '11px', color: '#9ca3af' }}>태그 없음</span>
+              )}
+            </MetaPill>
+
+            {/* DOI */}
+            <MetaPill label="DOI" icon={
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            }>
+              <span style={{ fontSize: '10px', color: '#6b7280', fontFamily: 'monospace', wordBreak: 'break-all', textAlign: 'right' }}>
+                {doiText}
+              </span>
+            </MetaPill>
           </div>
         </div>
 
-        {/* AI 요약 */}
-        <Section title="AI 요약 ✨">
-          <div style={{
-            background: '#fff',
-            borderRadius: '12px',
-            padding: '16px 20px',
-            fontSize: '14px',
-            color: '#374151',
-            lineHeight: 1.7,
-            border: '1px solid #e5e7eb',
-            minHeight: '52px',
-          }}>
+        {/* 이 논문을 왜 읽어야 할까요? */}
+        <Section title="이 논문을 왜 읽어야 할까요?" subtitle="관심 분야 기준으로 핵심 내용을 요약했어요.">
+          <p style={{ fontSize: '14px', color: '#374151', lineHeight: 1.75, margin: 0 }}>
             {loading ? <Skeleton /> : aiSummary}
-          </div>
+          </p>
         </Section>
 
         {/* Abstract */}
         <Section title="Abstract">
-          <div style={{ borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', background: '#fff' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>
-                EN
-              </div>
-              <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7, margin: 0 }}>
-                {paper.abstract || 'Abstract 정보가 없습니다.'}
-              </p>
-            </div>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#3B6FE8', marginBottom: '8px' }}>EN</div>
+            <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.75, margin: 0 }}>
+              {paper.abstract || 'Abstract 정보가 없습니다.'}
+            </p>
 
-            <div style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px' }}>
-                KO
-              </div>
-              <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7, margin: 0, minHeight: '40px' }}>
-                {loading ? <Skeleton /> : abstractKo}
-              </p>
-            </div>
+            <hr style={{ border: 'none', borderTop: '1px solid #E3E8F5', margin: '18px 0' }} />
+
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#3B6FE8', marginBottom: '8px' }}>KO</div>
+            <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.75, margin: 0, minHeight: '40px' }}>
+              {loading ? <Skeleton /> : abstractKo}
+            </p>
           </div>
         </Section>
 
         {/* Key Takeaways */}
         <Section title="Key Takeaways">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {(['what', 'how', 'soWhat'] as const).map(key => {
-              const labels = { what: 'What', how: 'How', soWhat: 'So What' }
-
+          <div>
+            {(['what', 'how', 'soWhat'] as const).map((key, idx) => {
+              const labels = { what: 'WHAT', how: 'HOW', soWhat: 'IMPACT' }
               return (
-                <div
-                  key={key}
-                  style={{
-                    borderRadius: '12px',
-                    border: '1px solid #e5e7eb',
-                    padding: '14px 18px',
-                    background: '#fff',
-                  }}
-                >
-                  <div style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: '#9ca3af',
-                    marginBottom: '6px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                  }}>
+                <div key={key}>
+                  {idx > 0 && <hr style={{ border: 'none', borderTop: '1px solid #E3E8F5', margin: '18px 0' }} />}
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#3B6FE8', marginBottom: '8px' }}>
                     {labels[key]}
                   </div>
-
-                  <div style={{
-                    fontSize: '13px',
-                    color: '#374151',
-                    lineHeight: 1.65,
-                    background: '#f9fafb',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
-                    minHeight: '40px',
-                  }}>
+                  <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.75, margin: 0, minHeight: '24px' }}>
                     {loading ? <Skeleton /> : takeaways?.[key]}
-                  </div>
+                  </p>
                 </div>
               )
             })}
@@ -289,7 +257,7 @@ export default function PaperDetail({
         {/* 최근 동향 논문 */}
         <div>
           <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a1a1a', marginBottom: '16px' }}>
-            최근 동향 논문
+            함께 보면 좋은 논문
           </h2>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
@@ -303,28 +271,60 @@ export default function PaperDetail({
   )
 }
 
-function MetaCard({ label, children }: { label: string; children: ReactNode }) {
+function MetaPill({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
   return (
     <div style={{
-      background: '#fff',
-      borderRadius: '10px',
-      padding: '10px 12px',
-      border: '1px solid #e5e7eb',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      background: '#EDF1FB',
+      borderRadius: '999px',
+      padding: '6px 14px 6px 6px',
+      minHeight: '38px',
     }}>
-      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>
+      {/* 파란 원형 아이콘 */}
+      <span style={{
+        width: '26px', height: '26px', borderRadius: '50%',
+        background: '#3B6FE8', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {icon}
+      </span>
+      <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, flexShrink: 0 }}>
         {label}
+      </span>
+      <div style={{
+        marginLeft: 'auto', display: 'flex', alignItems: 'center',
+        gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end',
+      }}>
+        {children}
       </div>
-      {children}
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <div style={{ marginBottom: '20px' }}>
-      <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a', marginBottom: '10px' }}>
-        {title}
-      </h3>
+    <div style={{
+      background: '#F4F6FD',
+      borderRadius: '16px',
+      padding: '22px 26px',
+      marginBottom: '16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: subtitle ? '4px' : '16px' }}>
+        {/* 파란 스파클 아이콘 */}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#3B6FE8">
+          <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />
+        </svg>
+        <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#3B6FE8', margin: 0 }}>
+          {title}
+        </h3>
+      </div>
+      {subtitle && (
+        <p style={{ fontSize: '11px', color: '#9ca3af', margin: '0 0 14px', paddingLeft: '20px' }}>
+          {subtitle}
+        </p>
+      )}
       {children}
     </div>
   )
@@ -354,6 +354,47 @@ function IconBtn({
         cursor: 'pointer',
       }}
     >
+      {children}
+    </button>
+  )
+}
+
+function ReadStatusBtn({
+  active,
+  onClick,
+  children,
+  icon,
+  activeColor,
+  activeBg,
+  activeBorder,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+  icon?: ReactNode
+  activeColor: string
+  activeBg: string
+  activeBorder: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '5px',
+        padding: '7px 16px',
+        fontSize: '12px',
+        fontWeight: active ? 700 : 600,
+        borderRadius: '20px',
+        border: `1.5px solid ${active ? activeBorder : '#D7DCE5'}`,
+        background: active ? activeBg : '#fff',
+        color: active ? activeColor : '#9ca3af',
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+      }}
+    >
+      {icon}
       {children}
     </button>
   )

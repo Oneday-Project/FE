@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { setToken } from '../lib/auth';
 
 export default function LoginPage({ onClose }: { onClose: () => void }) {
   const [showSignup, setShowSignup] = useState(false);
@@ -7,6 +8,116 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
   const [confirm, setConfirm] = useState("");
 
   const isMismatch = confirm.length > 0 && password !== confirm;
+
+  // 로그인 폼 상태
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // 실제 로그인: POST /api/auth/login → 응답 토큰 저장
+  const handleLogin = async () => {
+    setLoginError(null);
+    if (!loginEmail || !loginPassword) {
+      setLoginError("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // /api → vite proxy → ngrok → 백엔드 /auth/login
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        // NestJS 에러 메시지(배열/문자열) 처리
+        const msg = Array.isArray(data?.message)
+          ? data.message.join("\n")
+          : data?.message ?? "로그인에 실패했습니다.";
+        throw new Error(msg);
+      }
+
+      // 응답: { accessToken, refreshToken }
+      if (!data?.accessToken) {
+        throw new Error("응답에서 accessToken을 찾지 못했습니다.");
+      }
+
+      setToken(data.accessToken, data.refreshToken); // 저장 + auth-change 이벤트 → 네브바 갱신
+      onClose();                                     // 이전 화면으로 복귀
+    } catch (e) {
+      setLoginError(e instanceof Error ? e.message : "로그인 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 회원가입 폼 상태 (password/confirm은 위에서 공유)
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupUsername, setSignupUsername] = useState("");   // 이름
+  const [signupNickname, setSignupNickname] = useState("");   // 닉네임
+  const [signupError, setSignupError] = useState<string | null>(null);
+  const [signupLoading, setSignupLoading] = useState(false);
+
+  // 실제 회원가입: POST /api/auth/register → 응답 토큰으로 바로 로그인 처리
+  const handleSignup = async () => {
+    setSignupError(null);
+    if (!signupEmail || !password || !signupNickname || !signupUsername) {
+      setSignupError("모든 항목을 입력해주세요.");
+      return;
+    }
+    if (password !== confirm) {
+      setSignupError("비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    setSignupLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        // 백엔드 요구 필드: username(이름), nickname(닉네임), email, password
+        body: JSON.stringify({
+          username: signupUsername,
+          nickname: signupNickname,
+          email: signupEmail,
+          password,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = Array.isArray(data?.message)
+          ? data.message.join("\n")
+          : data?.message ?? "회원가입에 실패했습니다.";
+        throw new Error(msg);
+      }
+
+      // register 응답도 { accessToken, refreshToken } → 가입 즉시 로그인
+      if (data?.accessToken) {
+        setToken(data.accessToken, data.refreshToken);
+        onClose();
+      } else {
+        // 토큰이 안 오면 로그인 화면으로 전환
+        setShowSignup(false);
+      }
+    } catch (e) {
+      setSignupError(e instanceof Error ? e.message : "회원가입 중 오류가 발생했습니다.");
+    } finally {
+      setSignupLoading(false);
+    }
+  };
 
   const inputStyle = {
     width: '100%',
@@ -120,27 +231,51 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
             {/* 이메일 */}
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontSize: 14, marginBottom: 6 }}>이메일</p>
-              <input placeholder="이메일을 입력해주세요." style={inputStyle} />
+              <input
+                type="email"
+                placeholder="이메일을 입력해주세요."
+                style={inputStyle}
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              />
             </div>
 
             {/* 비밀번호 */}
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 14, marginBottom: 6 }}>비밀번호</p>
-              <input type="password" placeholder="비밀번호를 입력해주세요." style={inputStyle} />
+              <input
+                type="password"
+                placeholder="비밀번호를 입력해주세요."
+                style={inputStyle}
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              />
             </div>
 
+            {/* 에러 메시지 */}
+            {loginError && (
+              <p style={{ fontSize: 13, color: '#ef4444', marginBottom: 12, whiteSpace: 'pre-line' }}>
+                {loginError}
+              </p>
+            )}
+
             {/* 로그인 버튼 */}
-            <button style={{
+            <button
+              onClick={handleLogin}
+              disabled={loading}
+              style={{
               width: '100%',
               padding: 14,
-              background: '#9ca3af',
+              background: loading ? '#c7cbd1' : '#9ca3af',
               color: '#fff',
               border: 'none',
               borderRadius: 10,
-              cursor: 'pointer',
+              cursor: loading ? 'default' : 'pointer',
               marginBottom: 16
             }}>
-              로그인
+              {loading ? '로그인 중…' : '로그인'}
             </button>
 
             {/* 회원가입 */}
@@ -213,7 +348,13 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               {/* 이메일 */}
               <div>
                 <p style={{ fontSize: 14, marginBottom: 6 }}>이메일</p>
-                <input placeholder="이메일을 입력해주세요." style={inputStyle} />
+                <input
+                  type="email"
+                  placeholder="이메일을 입력해주세요."
+                  style={inputStyle}
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                />
               </div>
 
               {/* 비밀번호 */}
@@ -257,24 +398,50 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
+              {/* 이름 */}
+              <div>
+                <p style={{ fontSize: 14, marginBottom: 6 }}>이름</p>
+                <input
+                  placeholder="이름을 입력해주세요"
+                  style={inputStyle}
+                  value={signupUsername}
+                  onChange={(e) => setSignupUsername(e.target.value)}
+                />
+              </div>
+
               {/* 닉네임 */}
               <div>
                 <p style={{ fontSize: 14, marginBottom: 6 }}>닉네임</p>
-                <input placeholder="닉네임을 입력해주세요." style={inputStyle} />
+                <input
+                  placeholder="닉네임을 입력해주세요"
+                  style={inputStyle}
+                  value={signupNickname}
+                  onChange={(e) => setSignupNickname(e.target.value)}
+                />
               </div>
 
+              {/* 에러 메시지 */}
+              {signupError && (
+                <p style={{ fontSize: 13, color: '#ef4444', margin: 0, whiteSpace: 'pre-line' }}>
+                  {signupError}
+                </p>
+              )}
+
               {/* 버튼 */}
-              <button style={{
+              <button
+                onClick={handleSignup}
+                disabled={signupLoading}
+                style={{
                 marginTop: 10,
                 padding: 14,
-                background: '#2563eb',
+                background: signupLoading ? '#93b0f5' : '#2563eb',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 10,
                 fontWeight: 600,
-                cursor: 'pointer'
+                cursor: signupLoading ? 'default' : 'pointer'
               }}>
-                회원가입
+                {signupLoading ? '가입 중…' : '회원가입'}
               </button>
 
             </div>

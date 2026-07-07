@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import PaperDetail from './PaperDetail'
 
 const tags = ['SML', 'ML', 'CV', 'NLP', 'Robotics', 'Retrieval AI', 'SAP', 'HCI', 'Multimodal', 'Code AI']
+const MAX_TAGS = 3 // 분야는 최대 3개까지 선택
 
 // 논문 데이터 타입 정의 (백엔드 응답 형식과 일치해야 함)
 export type Paper = {
@@ -27,8 +28,8 @@ const importanceOptions = [1, 2, 3]
 
 export default function Papers() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [importance, setImportance] = useState(1)
-  const [period, setPeriod] = useState<'1y' | '3y' | '5y' | 'custom'>('1y')
+  const [importance, setImportance] = useState<number | null>(null)          // 중요도: 1개만 (미선택 가능)
+  const [period, setPeriod] = useState<'1y' | '3y' | '5y' | 'custom' | null>(null) // 연도: 1개만 (미선택 가능)
   const [searchValue, setSearchValue] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
@@ -52,6 +53,18 @@ export default function Papers() {
     try {
       const params = new URLSearchParams()
       if (cursor) params.set('cursor', cursor) // 더보기 클릭 시 커서 파라미터 추가
+
+      // 키워드 검색: 백엔드에서 동작 확인됨 (keyword=Qwen → 결과 좁혀짐)
+      if (searchValue.trim()) params.set('keyword', searchValue.trim())
+
+      // ⚠️ 분야/중요도/연도: 백엔드 파라미터명이 아직 미확정이라 전송 보류.
+      //   - 분야: 백엔드는 arXiv 코드(cs.AI, cs.CV …)를 쓰므로 UI 태그(SML/CV…)와 매핑 필요
+      //   - 중요도: starTier(1~3) 로 추정되나 필터 파라미터명 미확인
+      //   - 연도: publishedDate 기준, 파라미터 형식 미확인
+      //   → Swagger의 GET /papers "Parameters"에서 실제 이름 확인되면 아래처럼 연결:
+      // if (selectedTags.length) params.set('<분야파라미터>', selectedTags.map(uiTagToArxiv).join(','))
+      // if (importance != null) params.set('<중요도파라미터>', String(importance))
+      // if (period) params.set('<연도파라미터>', period)
 
       const query = params.toString()
       // 실제 요청 URL: /api/papers → vite proxy → ngrok → 백엔드
@@ -101,11 +114,24 @@ export default function Papers() {
     }
   }
 
-  // 분야 태그 토글 (선택/해제)
+  // 분야 태그 토글 (선택/해제) — 최대 3개까지만
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    )
+    setSelectedTags(prev => {
+      if (prev.includes(tag)) return prev.filter(t => t !== tag)  // 이미 선택 → 해제
+      if (prev.length >= MAX_TAGS) return prev                    // 3개 꽉 참 → 무시
+      return [...prev, tag]                                       // 새로 선택
+    })
+  }
+
+  // 중요도/연도 단일 선택 (같은 걸 다시 누르면 해제)
+  const selectImportance = (opt: number) =>
+    setImportance(prev => (prev === opt ? null : opt))
+  const selectPeriod = (key: '1y' | '3y' | '5y' | 'custom') =>
+    setPeriod(prev => (prev === key ? null : key))
+
+  // 돋보기 버튼(또는 Enter)을 눌러야 현재 선택된 필터로 검색 적용
+  const handleSearch = () => {
+    fetchPapers()  // 커서 없이 → 첫 페이지부터 현재 필터로 다시 조회
   }
 
   // 북마크 토글 (현재는 로컬 상태만 변경, 백엔드 연동 필요하면 API 호출 추가)
@@ -163,10 +189,14 @@ export default function Papers() {
             onChange={e => setSearchValue(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
             placeholder="제목/저자/키워드를 입력하세요."
             style={{ flex: 1, border: 'none', outline: 'none', fontSize: '15px', color: '#374151', background: 'transparent' }}
           />
-          <button style={{
+          <button
+            onClick={handleSearch}
+            aria-label="검색"
+            style={{
             width: '44px', height: '44px', background: '#00178E',
             border: 'none', borderRadius: '50%', display: 'flex',
             alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
@@ -185,13 +215,15 @@ export default function Papers() {
               <span style={{ fontSize: '13px', color: '#6b7280', width: '42px', flexShrink: 0 }}>중요도</span>
               {importanceOptions.map(opt => {
                 const active = importance === opt
+                const dim = importance !== null && !active   // 다른 걸 고르면 연하게
                 return (
-                  <button key={opt} onClick={() => setImportance(opt)}
+                  <button key={opt} onClick={() => selectImportance(opt)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: '3px',
                       padding: '5px 11px', borderRadius: '20px',
                       border: active ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
                       background: 'transparent', cursor: 'pointer',
+                      opacity: dim ? 0.4 : 1,
                       transition: 'all 0.15s',
                     }}>
                     {Array.from({ length: opt }).map((_, i) => (
@@ -205,33 +237,45 @@ export default function Papers() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '13px', color: '#6b7280', width: '42px', flexShrink: 0 }}>연도</span>
-              {([['1y','최근 1년'],['3y','최근 3년'],['5y','최근 5년'],['custom','기간 설정']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => setPeriod(key)} style={{
-                  padding: '6px 14px', fontSize: '12px',
-                  fontWeight: period === key ? 600 : 500,
-                  borderRadius: '20px',
-                  border: period === key ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
-                  background: 'transparent',
-                  color: period === key ? '#00178E' : '#6b7280', cursor: 'pointer',
-                  transition: 'all 0.15s',
-                }}>{label}</button>
-              ))}
+              {([['1y','최근 1년'],['3y','최근 3년'],['5y','최근 5년'],['custom','기간 설정']] as const).map(([key, label]) => {
+                const active = period === key
+                const dim = period !== null && !active   // 다른 걸 고르면 연하게
+                return (
+                  <button key={key} onClick={() => selectPeriod(key)} style={{
+                    padding: '6px 14px', fontSize: '12px',
+                    fontWeight: active ? 600 : 500,
+                    borderRadius: '20px',
+                    border: active ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
+                    background: 'transparent',
+                    color: active ? '#00178E' : '#6b7280', cursor: 'pointer',
+                    opacity: dim ? 0.4 : 1,
+                    transition: 'all 0.15s',
+                  }}>{label}</button>
+                )
+              })}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
-            <span style={{ fontSize: '13px', color: '#6b7280', flexShrink: 0, paddingTop: '6px' }}>분야</span>
+            <span style={{ fontSize: '13px', color: '#6b7280', flexShrink: 0, paddingTop: '6px' }}>
+              분야 <span style={{ fontSize: '11px', color: '#9ca3af' }}>(최대 3개)</span>
+            </span>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {tags.map(tag => (
-                <button key={tag} onClick={() => toggleTag(tag)} style={{
-                  padding: '6px 14px', fontSize: '12px',
-                  fontWeight: selectedTags.includes(tag) ? 600 : 500,
-                  borderRadius: '20px',
-                  border: selectedTags.includes(tag) ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
-                  background: 'transparent',
-                  color: selectedTags.includes(tag) ? '#00178E' : '#6b7280',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}>{tag}</button>
-              ))}
+              {tags.map(tag => {
+                const selected = selectedTags.includes(tag)
+                const disabled = !selected && selectedTags.length >= MAX_TAGS  // 3개 꽉 차면 나머지 비활성
+                return (
+                  <button key={tag} onClick={() => toggleTag(tag)} disabled={disabled} style={{
+                    padding: '6px 14px', fontSize: '12px',
+                    fontWeight: selected ? 600 : 500,
+                    borderRadius: '20px',
+                    border: selected ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
+                    background: 'transparent',
+                    color: selected ? '#00178E' : '#6b7280',
+                    opacity: disabled ? 0.4 : 1,
+                    cursor: disabled ? 'default' : 'pointer', transition: 'all 0.15s',
+                  }}>{tag}</button>
+                )
+              })}
             </div>
           </div>
         </div>

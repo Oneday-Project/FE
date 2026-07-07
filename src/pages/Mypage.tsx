@@ -1,11 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-const mockUser = {
-  name: '심영주',
-  nickname: '',
-  email: '202310847@sangmyung.kr',
-}
+import { clearToken, fetchMe, type Me } from '../lib/auth'
 
 // 북마크 논문 임시 데이터
 const mockBookmarkedPapers = [
@@ -23,11 +18,26 @@ const sideMenuItems = ['북마크한 논문', '읽고 있는 논문', '다 읽�
 export default function MyPage() {
   const navigate = useNavigate()
   const [activeMenu, setActiveMenu] = useState('프로필 수정')
-  const [nickname, setNickname] = useState(mockUser.nickname)
+  const [me, setMe] = useState<Me | null>(null)   // 로그인 사용자 정보 (/users/me)
   // const [password, setPassword] = useState('')  // 비밀번호 변경 기능 미사용
   const [currentPage, setCurrentPage] = useState(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [profileImage, setProfileImage] = useState<string | null>(null)
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
+
+  // 마운트 시 실제 사용자 정보 조회 → 인사말·이름·닉네임·이메일 표시
+  useEffect(() => {
+    fetchMe().then(user => {
+      if (user) setMe(user)
+    })
+  }, [])
+
+  // 실제 로그아웃 처리: 저장된 토큰을 삭제하고 메인으로 이동
+  const handleLogout = () => {
+    clearToken()          // 토큰 삭제 + auth-change 이벤트 → 네브바가 '로그인/회원가입'으로 바뀜
+    setShowLogoutModal(false)
+    navigate('/')         // 로그아웃 후 화면은 미정 → 일단 메인으로
+  }
 
   // 업로드 아이콘 클릭 → 숨겨진 input 열기 → 선택한 이미지 미리보기
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,7 +67,7 @@ export default function MyPage() {
 
         {/* 인사말 */}
         <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#1a1a1a', marginBottom: '48px' }}>
-          wnnye님, 반갑습니다.
+          {me?.nickname ?? ''}님, 반갑습니다.
         </h1>
 
         <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '48px', alignItems: 'start' }}>
@@ -102,7 +112,7 @@ export default function MyPage() {
             {['로그아웃', '회원탈퇴'].map(item => (
               <button
                 key={item}
-                onClick={() => item === '로그아웃' && navigate('/')}
+                onClick={() => { if (item === '로그아웃') setShowLogoutModal(true) }}
                 style={{
                   textAlign: 'left', background: 'none', border: 'none',
                   padding: '6px 0', fontSize: '14px', fontWeight: 400,
@@ -160,27 +170,18 @@ export default function MyPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                     <span style={{ fontSize: '15px', color: '#6b7280' }}>이름</span>
-                    <span style={{ fontSize: '15px', fontWeight: 600, color: '#1a1a1a' }}>{mockUser.name}</span>
+                    <span style={{ fontSize: '15px', fontWeight: 600, color: '#1a1a1a' }}>{me?.username ?? ''}</span>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
                     <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>닉네임</span>
-                    <input
-                      value={nickname}
-                      onChange={e => setNickname(e.target.value)}
-                      placeholder="닉네임을 입력해주세요"
-                      style={{
-                        flex: 1, padding: '12px 16px', fontSize: '14px',
-                        border: '1px solid #d1d5db', borderRadius: '10px',
-                        outline: 'none', color: '#374151', background: '#fff',
-                      }}
-                    />
+                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>{me?.nickname ?? ''}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
                     <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>이메일</span>
-                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>{mockUser.email}</span>
+                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>{me?.email ?? ''}</span>
                   </div>
                   {/* 비밀번호 변경 기능 미사용 — 회원가입 시 설정한 비밀번호로만 로그인 (필요 시 주석 해제)
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -358,6 +359,69 @@ export default function MyPage() {
           </div>
         </div>
       </div>
+
+      {/* 로그아웃 확인 모달 — 화면 전체를 회색으로 덮고 가운데 팝업 */}
+      {showLogoutModal && (
+        <div
+          onClick={() => setShowLogoutModal(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(71, 78, 94, 0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              width: '90%', maxWidth: '380px',
+              background: '#fff', borderRadius: '16px',
+              padding: '32px 32px 28px',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+            }}
+          >
+            {/* 닫기 */}
+            <button
+              onClick={() => setShowLogoutModal(false)}
+              aria-label="닫기"
+              style={{
+                position: 'absolute', top: 18, right: 18,
+                border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: '18px', color: '#6b7280', lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+
+            {/* 타이틀 (로그인 화면과 동일 문구) */}
+            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1a1a1a', margin: 0, lineHeight: 1.5 }}>
+              대학원 준비,
+            </h2>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1a1a1a', margin: '0 0 28px', lineHeight: 1.5 }}>
+              한 곳에서 끝내는 H-AI Grad
+            </h2>
+
+            {/* 안내 문구 */}
+            <p style={{ fontSize: '15px', fontWeight: 600, color: '#374151', margin: '0 0 24px' }}>
+              로그아웃 하시겠습니까?
+            </p>
+
+            {/* 실제 로그아웃 실행 */}
+            <button
+              onClick={handleLogout}
+              style={{
+                width: '100%', padding: '13px',
+                background: '#8b8fab', color: '#fff',
+                border: 'none', borderRadius: '10px',
+                fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              로그아웃 하기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
