@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 /* =========================================================
  *  대표색 (색 바꿀 땐 여기 두 줄만 수정)
@@ -190,8 +190,21 @@ function OptionsField({
 }
 
 export default function Roadmap() {
-  const [answers, setAnswers] = useState<Answers>({});
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // "수정하러 가기"로 들어오면(location.state.edit) 저장된 답변을 불러와 미리 채움
+  const [answers, setAnswers] = useState<Answers>(() => {
+    if (location.state?.edit) {
+      try {
+        const saved = localStorage.getItem("roadmapAnswers");
+        if (saved) return JSON.parse(saved) as Answers;
+      } catch {
+        /* 파싱 실패 시 빈 값으로 시작 */
+      }
+    }
+    return {};
+  });
 
   const questionItems = questions.filter((q): q is Extract<Question, { id: string }> => "id" in q);
   const lastQuestionId = questionItems[questionItems.length - 1].id;
@@ -312,7 +325,12 @@ export default function Roadmap() {
         <div style={{ marginTop: "48px", textAlign: "center" }}>
           <button
             disabled={!isAllAnswered}
-            onClick={() => isAllAnswered && navigate("/roadmap-result", { state: answers })}
+            onClick={() => {
+              if (!isAllAnswered) return;
+              // 임시 저장 (백엔드 연동 시 이 줄을 저장 API 호출로 교체)
+              localStorage.setItem("roadmapAnswers", JSON.stringify(answers));
+              navigate("/roadmap-result", { state: answers });
+            }}
             style={{
               padding: "14px 32px",
               borderRadius: "12px",
