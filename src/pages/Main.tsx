@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { RadarChart } from "./RoadmapResult";
-import { calculateScores } from "./roadmap";
+import { calculateScores } from "./roadmapScore";   
 
 const BRAND = "#00178E";
 
