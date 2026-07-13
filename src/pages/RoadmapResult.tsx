@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
-import { calculateScores, type Answers } from "./roadmap";
+import { calculateScores, type Answers } from "./roadmapScore";
 
 /* =========================================================
  *  대표색 (앞으로 색 바꿀 땐 여기 두 줄만 수정하면 됨)
