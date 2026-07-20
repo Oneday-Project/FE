@@ -1,6 +1,10 @@
+import { useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { RadarChart } from "./RoadmapResult";
-import { calculateScores } from "./roadmapScore";   
+import { calculateScores } from "./roadmapScore";
+import ReadStatusTag from "../components/ReadStatusTag";
+import { subscribeReadStatus, getReadStatusSnapshot } from "../lib/readStatus";
+import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from "../lib/bookmarks";
 
 const BRAND = "#00178E";
 
@@ -229,6 +233,166 @@ function MyRoadmapSection() {
   );
 }
 
+/* ── 이어서 읽어볼까요? — 읽는 중인 논문 캐러셀 ──
+   논문 상세에서 '읽는 중'으로 표시한 논문이 여기에 모임 (lib/readStatus)
+   한 번에 3개씩, 좌우 화살표로 넘김 */
+const CARDS_PER_PAGE = 3;
+
+function ContinueReadingSection() {
+  const navigate = useNavigate();
+  const [page, setPage] = useState(0);
+  const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarksSnapshot);
+  const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot);
+  const reading = Object.values(readMap)
+    .filter((entry) => entry.status === "reading")
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+
+  const pageCount = Math.max(1, Math.ceil(reading.length / CARDS_PER_PAGE));
+  const current = Math.min(page, pageCount - 1);
+  const shown = reading.slice(current * CARDS_PER_PAGE, current * CARDS_PER_PAGE + CARDS_PER_PAGE);
+
+  return (
+    <section style={{ marginTop: "64px" }}>
+      <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 20px" }}>이어서 읽어볼까요?</h2>
+
+      {reading.length === 0 ? (
+        <div style={{ background: "#fff", borderRadius: "24px", padding: "48px 40px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)", textAlign: "center" }}>
+          <p style={{ fontSize: "15px", fontWeight: 600, color: "#1e293b", margin: "0 0 6px" }}>아직 읽는 중인 논문이 없어요.</p>
+          <p style={{ fontSize: "13px", color: "#94a3b8", margin: 0 }}>논문 상세 페이지에서 “읽는 중”을 누르면 여기에 모여요.</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <CarouselArrow direction="left" disabled={current === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} />
+
+            <div style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+              {shown.map(({ paper, status }) => (
+                <div
+                  key={paper.arxivId}
+                  onClick={() => navigate("/papers")}
+                  style={{
+                    background: "#fff", borderRadius: "14px", padding: "16px",
+                    boxShadow: "0 2px 12px rgba(15,23,42,0.07)", border: "1px solid #f0f0f0",
+                    height: "196px",
+                    display: "flex", flexDirection: "column", gap: "8px",
+                    cursor: "pointer", transition: "box-shadow 0.2s, transform 0.2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 24px rgba(0,23,142,0.13)";
+                    (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(15,23,42,0.07)";
+                    (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
+                  }}
+                >
+                  {/* 상태 태그(없으면 빈 자리) + 북마크 */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <ReadStatusTag status={status} />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void toggleBookmark(paper);
+                      }}
+                      aria-label="북마크"
+                      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", lineHeight: 0 }}
+                    >
+                      <BookmarkIcon filled={!!bookmarks[paper.arxivId]} />
+                    </button>
+                  </div>
+
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{paper.publishedDate?.slice(0, 4) ?? ""}</span>
+
+                  <p style={{
+                    fontSize: "13px", fontWeight: 700, color: "#0f172a", lineHeight: 1.5, margin: 0,
+                    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                  }}>
+                    {paper.title}
+                  </p>
+
+                  <div style={{ height: "1px", background: "rgba(60,60,67,0.25)" }} />
+
+                  <p style={{
+                    flex: 1, minHeight: 0,
+                    fontSize: "11px", color: "#64748b", lineHeight: 1.5, margin: 0,
+                    display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+                  }}>
+                    {paper.abstract}
+                  </p>
+
+                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                    {paper.fields.slice(0, 3).map((field) => (
+                      <span key={field} style={{ fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "999px", border: `1px solid ${BRAND}`, color: BRAND }}>
+                        {field}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* 3개 미만이면 자리 유지 */}
+              {Array.from({ length: CARDS_PER_PAGE - shown.length }).map((_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+            </div>
+
+            <CarouselArrow direction="right" disabled={current >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} />
+          </div>
+
+          <div style={{ textAlign: "right", marginTop: "20px" }}>
+            <button
+              onClick={() => navigate("/mypage")}
+              style={{ padding: "12px 24px", background: "#7f9bec", color: "#fff", border: "none", borderRadius: "12px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
+            >
+              읽는 중인 논문 전체보기 &gt;
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function BookmarkIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="13" height="18" viewBox="0 0 22 31" fill="none">
+      <path
+        d="M1 3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v26l-10-7-10 7V3z"
+        fill={filled ? "#3B82F6" : "none"}
+        stroke={filled ? "#3B82F6" : "rgba(60,60,67,0.4)"}
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CarouselArrow({ direction, disabled, onClick }: { direction: "left" | "right"; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={direction === "left" ? "이전" : "다음"}
+      style={{
+        width: "24px", height: "48px", flexShrink: 0,
+        background: "none", border: "none", padding: 0,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.25 : 1,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "opacity 0.15s",
+      }}
+    >
+      <svg
+        width="20" height="20" viewBox="0 0 24 24" fill="none"
+        stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ transform: direction === "right" ? "rotate(180deg)" : undefined }}
+      >
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+    </button>
+  );
+}
+
 /* ── 메인 페이지 ── */
 export default function Main() {
   const navigate = useNavigate();
@@ -273,7 +437,9 @@ export default function Main() {
         </div>
       </div>
 
-      {/* 이어서 읽어볼까요? 논문 캐러셀 — 팀원 컴포넌트 자리 (추후 삽입) */}
+      {/* 이어서 읽어볼까요? — 읽는 중인 논문 캐러셀 */}
+      <ContinueReadingSection />
+
 
       {/* My 로드맵 요약 */}
       <MyRoadmapSection />

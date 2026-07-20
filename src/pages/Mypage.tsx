@@ -7,18 +7,13 @@ import {
   getReadStatusSnapshot,
   type ReadStatus,
 } from '../lib/readStatus'
+import {
+  subscribeBookmarks,
+  getBookmarksSnapshot,
+  toggleBookmark,
+  type BookmarkedPaper,
+} from '../lib/bookmarks'
 
-// 북마크 논문 임시 데이터
-const mockBookmarkedPapers = [
-  { id: 1, year: 2025, tag: '논문태그', title: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', summary: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', chips: ['CV', 'LLM', 'UI/UX'], bookmarked: true },
-  { id: 2, year: 2025, tag: '논문태그', title: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', summary: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', chips: ['CV', 'LLM', 'UI/UX'], bookmarked: true },
-  { id: 3, year: 2025, tag: '논문태그', title: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', summary: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', chips: ['CV', 'LLM', 'UI/UX'], bookmarked: true },
-  { id: 4, year: 2025, tag: '논문태그', title: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', summary: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', chips: ['CV', 'LLM', 'UI/UX'], bookmarked: true },
-  { id: 5, year: 2025, tag: '논문태그', title: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', summary: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', chips: ['CV', 'LLM', 'UI/UX'], bookmarked: true },
-  { id: 6, year: 2025, tag: '논문태그', title: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', summary: '안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요', chips: ['CV', 'LLM', 'UI/UX'], bookmarked: true },
-]
-
-const ITEMS_PER_PAGE = 6
 const sideMenuItems = ['북마크한 논문', '읽고 있는 논문', '다 읽은 논문']
 
 export default function MyPage() {
@@ -26,7 +21,6 @@ export default function MyPage() {
   const [activeMenu, setActiveMenu] = useState('프로필 수정')
   const [me, setMe] = useState<Me | null>(null)   // 로그인 사용자 정보 (/users/me)
   // const [password, setPassword] = useState('')  // 비밀번호 변경 기능 미사용
-  const [currentPage, setCurrentPage] = useState(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [profileImage, setProfileImage] = useState<string | null>(null)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
@@ -54,13 +48,6 @@ export default function MyPage() {
       reader.readAsDataURL(file)
     }
   }
-  const [bookmarks, setBookmarks] = useState<Record<number, boolean>>(
-    Object.fromEntries(mockBookmarkedPapers.map(p => [p.id, p.bookmarked]))
-  )
-
-  const totalPages = Math.ceil(mockBookmarkedPapers.length / ITEMS_PER_PAGE)
-  const pagedPapers = mockBookmarkedPapers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-
   return (
     <div style={{
       width: '100%',
@@ -101,7 +88,7 @@ export default function MyPage() {
             {sideMenuItems.map(item => (
               <button
                 key={item}
-                onClick={() => { setActiveMenu(item); setCurrentPage(1) }}
+                onClick={() => setActiveMenu(item)}
                 style={{
                   textAlign: 'left', background: 'none', border: 'none',
                   padding: '6px 0', fontSize: '14px', fontWeight: 400,
@@ -216,138 +203,8 @@ export default function MyPage() {
               </div>
             )}
 
-            {/* 북마크한 논문 */}
-            {activeMenu === '북마크한 논문' && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '32px' }}>
-                  {pagedPapers.map(paper => (
-                    <div
-                      key={paper.id}
-                      style={{
-                        background: '#fff', borderRadius: '14px', padding: '18px',
-                        boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-                        display: 'flex', flexDirection: 'column', gap: '8px',
-                        cursor: 'pointer', transition: 'box-shadow 0.2s, transform 0.2s',
-                      }}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 6px 24px rgba(59,111,232,0.13)'
-                        ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'
-                        ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{
-                          fontSize: '11px', fontWeight: 600, color: '#6b7280',
-                          background: '#f3f4f6', borderRadius: '6px', padding: '3px 8px',
-                        }}>
-                          {paper.tag}
-                        </span>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            setBookmarks(prev => ({ ...prev, [paper.id]: !prev[paper.id] }))
-                          }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24"
-                            fill={bookmarks[paper.id] ? '#3B6FE8' : 'none'}
-                            stroke={bookmarks[paper.id] ? '#3B6FE8' : '#9ca3af'}
-                            strokeWidth="2" strokeLinecap="round"
-                          >
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-                          </svg>
-                        </button>
-                      </div>
-
-                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>{paper.year}</span>
-
-                      <p style={{
-                        fontSize: '13px', fontWeight: 700, color: '#1a1a1a',
-                        lineHeight: 1.5, margin: 0,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      } as React.CSSProperties}>
-                        {paper.title}
-                      </p>
-
-                      <p style={{
-                        fontSize: '12px', color: '#6b7280', lineHeight: 1.6, margin: 0,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      } as React.CSSProperties}>
-                        {paper.summary}
-                      </p>
-
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                        {paper.chips.map(chip => (
-                          <span key={chip} style={{
-                            fontSize: '11px', fontWeight: 500,
-                            color: '#3B6FE8', background: '#EEF3FF',
-                            borderRadius: '20px', padding: '3px 9px',
-                          }}>
-                            {chip}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 페이지네이션 */}
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}>
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    style={{ background: 'none', border: 'none', cursor: currentPage === 1 ? 'default' : 'pointer', color: '#9ca3af', fontSize: '14px' }}
-                  >
-                    «
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    style={{ background: 'none', border: 'none', cursor: currentPage === 1 ? 'default' : 'pointer', color: '#9ca3af', fontSize: '14px' }}
-                  >
-                    ‹
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      style={{
-                        width: '32px', height: '32px', borderRadius: '6px',
-                        border: 'none', cursor: 'pointer', fontSize: '14px',
-                        background: currentPage === page ? '#3B6FE8' : 'none',
-                        color: currentPage === page ? '#fff' : '#6b7280',
-                        fontWeight: currentPage === page ? 600 : 400,
-                      }}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    style={{ background: 'none', border: 'none', cursor: currentPage === totalPages ? 'default' : 'pointer', color: '#9ca3af', fontSize: '14px' }}
-                  >
-                    ›
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    style={{ background: 'none', border: 'none', cursor: currentPage === totalPages ? 'default' : 'pointer', color: '#9ca3af', fontSize: '14px' }}
-                  >
-                    »
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* 북마크한 논문 — POST /papers/bookmark/{arxivId} 로 서버와 동기화 */}
+            {activeMenu === '북마크한 논문' && <BookmarkList />}
 
             {/* 읽고 있는 논문 / 다 읽은 논문 — 상세 페이지에서 지정한 상태로 채워짐 */}
             {(activeMenu === '읽고 있는 논문' || activeMenu === '다 읽은 논문') && (
@@ -419,6 +276,89 @@ export default function MyPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* 북마크한 논문 목록
+   논문 목록·상세·메인에서 북마크를 누르면 서버(POST /papers/bookmark/{arxivId})에 반영되고
+   여기에도 함께 나타남. 최초 목록은 GET /users/me 의 bookmarkPapers 로 불러옴. */
+function BookmarkList() {
+  const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarksSnapshot)
+  const papers = Object.values(bookmarks)
+
+  if (papers.length === 0) {
+    return (
+      <div style={{
+        background: '#fff', borderRadius: '20px', padding: '40px 48px',
+        border: '1px solid #e5e7eb', boxShadow: '0 2px 20px rgba(0,0,0,0.04)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', minHeight: '240px', gap: '10px',
+      }}>
+        <div style={{ fontSize: '15px', fontWeight: 500, color: '#374151' }}>북마크한 논문이 없어요.</div>
+        <div style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>
+          논문 카드의 북마크 아이콘을 누르면 여기에 모여요.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+      {papers.map(paper => (
+        <BookmarkCard key={paper.arxivId} paper={paper} />
+      ))}
+    </div>
+  )
+}
+
+function BookmarkCard({ paper }: { paper: BookmarkedPaper }) {
+  return (
+    <div style={{
+      background: '#fff', borderRadius: '14px', padding: '18px',
+      boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
+      display: 'flex', flexDirection: 'column', gap: '8px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+          {paper.publishedDate?.slice(0, 4) ?? ''}
+        </span>
+        <button
+          onClick={() => void toggleBookmark(paper)}
+          aria-label="북마크 해제"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', lineHeight: 0 }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#3B6FE8" stroke="#3B6FE8" strokeWidth="2" strokeLinecap="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
+      </div>
+
+      <p style={{
+        fontSize: '13px', fontWeight: 700, color: '#1a1a1a', lineHeight: 1.5, margin: 0,
+        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      } as React.CSSProperties}>
+        {paper.title}
+      </p>
+
+      <p style={{
+        fontSize: '12px', color: '#6b7280', lineHeight: 1.6, margin: 0,
+        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      } as React.CSSProperties}>
+        {paper.abstract}
+      </p>
+
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+        {paper.fields.map(field => (
+          <span key={field} style={{
+            fontSize: '11px', fontWeight: 500,
+            color: '#3B6FE8', background: '#EEF3FF',
+            borderRadius: '20px', padding: '3px 9px',
+          }}>
+            {field}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }
