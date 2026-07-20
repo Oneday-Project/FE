@@ -1,104 +1,188 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react'
 
-const BRAND = "#00178E";
+/* 피그마: Footer final (1229:13681)
+   구성은 피그마 그대로, 크기만 프로젝트 스케일에 맞춰 살짝 줄임. */
 
-/* 팀 크레딧 컬럼 */
-function CreditColumn({ icon, title, names }: { icon: ReactNode; title: string; names: string[] }) {
-  return (
-    <div style={{ minWidth: "120px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "18px" }}>
-        <span style={{ fontSize: "15px", fontWeight: 700, color: BRAND }}>{title}</span>
-        {icon}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {names.map((n) => (
-          <span key={n} style={{ fontSize: "14px", color: "#475569" }}>{n}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
+const NAVY = '#00178E'
+const INK = '#3C3C43'
+const INK_80 = 'rgba(60,60,67,0.8)'
+
+const teams = [
+  {
+    title: 'Design',
+    icon: <NibIcon />,
+    members: ['Yeongju Sim'],
+  },
+  {
+    title: 'Front - End',
+    icon: <WebDesignIcon />,
+    members: ['Heejung Jang', 'Serih Yu'],
+  },
+  {
+    title: 'Back - End',
+    icon: <BrowserIcon />,
+    members: ['Jungwoo Kim', 'Yerin Song'],
+  },
+]
 
 export default function Footer() {
-  /* 아이콘 (작은 SVG) */
-  const penIcon = (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-      <path d="M4 20h4L18 10l-4-4L4 16v4z" stroke={BRAND} strokeWidth="2" strokeLinejoin="round" />
-      <path d="M14 6l4 4" stroke={BRAND} strokeWidth="2" />
-    </svg>
-  );
-  const codeIcon = (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-  const dbIcon = (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-      <rect x="4" y="5" width="16" height="6" rx="1.5" stroke={BRAND} strokeWidth="2" />
-      <rect x="4" y="13" width="16" height="6" rx="1.5" stroke={BRAND} strokeWidth="2" />
-    </svg>
-  );
-  const mailIcon = (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="6" width="18" height="12" rx="2" stroke={BRAND} strokeWidth="1.8" />
-      <path d="M4 7l8 6 8-6" stroke={BRAND} strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-  const pinIcon = (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M12 21s7-6.5 7-11a7 7 0 10-14 0c0 4.5 7 11 7 11z" stroke={BRAND} strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx="12" cy="10" r="2.5" stroke={BRAND} strokeWidth="1.8" />
-    </svg>
-  );
-
   return (
-    <footer style={{ width: "100%", background: "#fff", padding: "56px 80px 28px" }}>
-      {/* 상단 */}
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "40px", flexWrap: "wrap" }}>
-        {/* 브랜드 */}
-        <div style={{ flex: "1 1 300px", maxWidth: "360px" }}>
-          <h2 style={{ fontSize: "24px", fontWeight: 800, color: BRAND, margin: "0 0 14px", letterSpacing: "-0.5px" }}>onedayproject</h2>
-          <p style={{ fontSize: "12.5px", color: "#3b4a8c", lineHeight: 1.6, margin: "0 0 18px" }}>
-            H-AI Grad helps students discover papers, track reading progress, and build personalized graduate school roadmaps.
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ width: "30px", height: "30px", borderRadius: "7px", background: BRAND, color: "#fff", fontSize: "11px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>AI</span>
-            <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>
-              휴먼AI공학전공 2026 졸업프로젝트<br />
-              Human-AI Engineering Major 2026 Graduation Project
+    <footer style={{
+      width: '100%',
+      background: '#fff',
+      borderTop: '1px solid #E3E8F5',
+      fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
+    }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '64px 40px 24px' }}>
+
+        {/* ── 상단: 소개 + 팀 + 연락처 ── */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(260px, 1.7fr) repeat(3, minmax(104px, 0.75fr)) minmax(230px, 1.2fr)',
+          gap: '32px',
+          alignItems: 'start',
+        }}>
+
+          {/* 소개 */}
+          <div>
+            <p style={{
+              fontFamily: "'DM Sans', 'Pretendard', sans-serif",
+              fontSize: '26px', fontWeight: 700, color: NAVY,
+              margin: '0 0 20px', lineHeight: 1.05,
+            }}>
+              onedayproject
+            </p>
+
+            <p style={{
+              fontSize: '12px', color: NAVY, lineHeight: 1.5,
+              margin: '0 0 28px', maxWidth: '310px',
+            }}>
+              H-AI Grad helps students discover papers, track reading progress,
+              and build personalized graduate school roadmaps.
+            </p>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* 상명대 로고 — public/sangmyung.svg 로 교체 */}
+              <img
+                src="/sangmyung.svg"
+                alt="상명대학교"
+                style={{ width: '16px', height: '22px', flexShrink: 0, objectFit: 'contain' }}
+              />
+              <div style={{ fontSize: '12px', color: INK_80, lineHeight: 1.5 }}>
+                <div>휴먼AI공학전공 2026 졸업프로젝트</div>
+                <div>Human-AI Engineering Major 2026 Graduation Project</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 팀 컬럼 3개 */}
+          {teams.map(team => (
+            <div key={team.title}>
+              <ColumnTitle icon={team.icon}>{team.title}</ColumnTitle>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {team.members.map(name => (
+                  <span key={name} style={{ fontSize: '14px', fontWeight: 500, color: INK_80 }}>
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* 연락처 */}
+          <div>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY, margin: '0 0 22px' }}>
+              Contacts us
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <a
+                href="mailto:onedayproject179@gmail.com"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontSize: '14px', fontWeight: 500, color: INK_80, textDecoration: 'none',
+                }}
+              >
+                <MailIcon />
+                onedayproject179@gmail.com
+              </a>
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                <span style={{ flexShrink: 0, marginTop: '2px' }}><PinIcon /></span>
+                <span style={{ fontSize: '14px', fontWeight: 500, color: INK_80, lineHeight: 1.45 }}>
+                  20, Hongjimun 2-gil, Jongno-gu, Seoul
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* 팀 크레딧 */}
-        <CreditColumn icon={penIcon} title="Design" names={["Yeongju Sim"]} />
-        <CreditColumn icon={codeIcon} title="Front - End" names={["Heejung Jang", "Serih Yu"]} />
-        <CreditColumn icon={dbIcon} title="Back - End" names={["Jungwoo Kim", "Yerin Song"]} />
+        {/* ── 하단 ── */}
+        <div style={{ height: '1px', background: '#E3E8F5', margin: '80px 0 20px' }} />
 
-        {/* 연락처 */}
-        <div style={{ minWidth: "220px" }}>
-          <div style={{ fontSize: "15px", fontWeight: 700, color: BRAND, marginBottom: "18px" }}>Contacts us</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
-            {mailIcon}
-            <span style={{ fontSize: "13px", color: "#475569" }}>onedayproject179@gmail.com</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-            {pinIcon}
-            <span style={{ fontSize: "13px", color: "#475569", lineHeight: 1.5 }}>
-              20, Hongjimun 2-gil,<br />Jongno-gu, Seoul
-            </span>
-          </div>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          flexWrap: 'wrap', gap: '8px',
+          fontSize: '12px', color: INK_80,
+        }}>
+          <span>Copyright © 2026 oneday project</span>
+          <span>All Rights Reserved</span>
         </div>
       </div>
-
-      {/* 구분선 */}
-      <div style={{ height: "1px", background: "#e5e7eb", margin: "40px 0 18px" }} />
-
-      {/* 하단 */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", color: "#94a3b8", flexWrap: "wrap", gap: "8px" }}>
-        <span>Copyright © 2026 oneday project</span>
-        <span>All Rights Reserved</span>
-      </div>
     </footer>
-  );
+  )
+}
+
+function ColumnTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: '0 0 22px' }}>
+      <span style={{ fontSize: '15px', fontWeight: 600, color: INK }}>{children}</span>
+      {icon}
+    </div>
+  )
+}
+
+/* ───────── 아이콘 ───────── */
+
+function NibIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill={NAVY}>
+      <path d="M3 3l7.5 2.2 8.3 8.3-5 5-8.3-8.3L3 3zm4.6 4.6a1.4 1.4 0 1 0 2-2 1.4 1.4 0 0 0-2 2zm7.7 12.6l1.8-1.8 2.6 2.6-1.8 1.8-2.6-2.6z" />
+    </svg>
+  )
+}
+
+function WebDesignIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
+      <path d="M2.5 8.5h19M6 6h.01M8.5 6h.01" />
+    </svg>
+  )
+}
+
+function BrowserIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill={NAVY}>
+      <path d="M3 4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4zm2 5v11h14V9H5zm1.6-3.4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm2.8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+    </svg>
+  )
+}
+
+function MailIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={INK_80} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+      <path d="M3.5 7l8.5 6 8.5-6" />
+    </svg>
+  )
+}
+
+function PinIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={INK_80} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 21.5s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11z" />
+      <circle cx="12" cy="10.5" r="2.6" />
+    </svg>
+  )
 }

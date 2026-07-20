@@ -1,6 +1,12 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { clearToken, fetchMe, type Me } from '../lib/auth'
+import ReadStatusTag from '../components/ReadStatusTag'
+import {
+  subscribeReadStatus,
+  getReadStatusSnapshot,
+  type ReadStatus,
+} from '../lib/readStatus'
 
 // 북마크 논문 임시 데이터
 const mockBookmarkedPapers = [
@@ -343,18 +349,9 @@ export default function MyPage() {
               </div>
             )}
 
-            {/* 나머지 메뉴 준비중 */}
-            {!['프로필 수정', '북마크한 논문'].includes(activeMenu) && (
-              <div style={{
-                background: '#fff', borderRadius: '20px', padding: '40px 48px',
-                border: '1px solid #e5e7eb', boxShadow: '0 2px 20px rgba(0,0,0,0.04)',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', minHeight: '240px', gap: '10px',
-              }}>
-                <div style={{ fontSize: '36px' }}>🚧</div>
-                <div style={{ fontSize: '15px', fontWeight: 500, color: '#374151' }}>{activeMenu}</div>
-                <div style={{ fontSize: '13px', color: '#9ca3af' }}>준비 중입니다.</div>
-              </div>
+            {/* 읽고 있는 논문 / 다 읽은 논문 — 상세 페이지에서 지정한 상태로 채워짐 */}
+            {(activeMenu === '읽고 있는 논문' || activeMenu === '다 읽은 논문') && (
+              <ReadStatusList status={activeMenu === '읽고 있는 논문' ? 'reading' : 'done'} />
             )}
           </div>
         </div>
@@ -422,6 +419,82 @@ export default function MyPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* 읽고 있는 / 다 읽은 논문 목록
+   논문 상세에서 '읽는 중 / 읽기 완료'를 누르면 localStorage에 쌓이고 여기에 반영됨.
+   (백엔드에 읽음 상태 API가 아직 없어서 로컬 저장 — lib/readStatus.ts 참고) */
+function ReadStatusList({ status }: { status: ReadStatus }) {
+  const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
+
+  const entries = Object.values(readMap)
+    .filter(entry => entry.status === status)
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+
+  if (entries.length === 0) {
+    return (
+      <div style={{
+        background: '#fff', borderRadius: '20px', padding: '40px 48px',
+        border: '1px solid #e5e7eb', boxShadow: '0 2px 20px rgba(0,0,0,0.04)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', minHeight: '240px', gap: '10px',
+      }}>
+        <div style={{ fontSize: '15px', fontWeight: 500, color: '#374151' }}>
+          {status === 'reading' ? '읽고 있는 논문이 없어요.' : '다 읽은 논문이 없어요.'}
+        </div>
+        <div style={{ fontSize: '13px', color: '#9ca3af', textAlign: 'center' }}>
+          논문 상세 페이지에서 “{status === 'reading' ? '읽는 중' : '읽기 완료'}”을 누르면 여기에 모여요.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+      {entries.map(({ paper }) => (
+        <div
+          key={paper.arxivId}
+          style={{
+            background: '#fff', borderRadius: '14px', padding: '18px',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
+            display: 'flex', flexDirection: 'column', gap: '8px',
+          }}
+        >
+          <ReadStatusTag status={status} />
+
+          <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+            {paper.publishedDate?.slice(0, 4) ?? ''}
+          </span>
+
+          <p style={{
+            fontSize: '13px', fontWeight: 700, color: '#1a1a1a', lineHeight: 1.5, margin: 0,
+            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          } as React.CSSProperties}>
+            {paper.title}
+          </p>
+
+          <p style={{
+            fontSize: '12px', color: '#6b7280', lineHeight: 1.6, margin: 0,
+            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          } as React.CSSProperties}>
+            {paper.abstract}
+          </p>
+
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+            {paper.fields.map(field => (
+              <span key={field} style={{
+                fontSize: '11px', fontWeight: 500,
+                color: '#3B6FE8', background: '#EEF3FF',
+                borderRadius: '20px', padding: '3px 9px',
+              }}>
+                {field}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
