@@ -1,5 +1,45 @@
-import { useState, useEffect, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import type { Paper } from './Papers'
+import { getToken } from '../lib/auth'
+import {
+  setReadStatus,
+  subscribeReadStatus,
+  getReadStatusSnapshot,
+  type ReadStatus,
+} from '../lib/readStatus'
+
+/* GET /ai-services/papers/{arxivId} 응답 (스웨거 PaperAiSummary)
+   — 토큰이 있어야 조회됨(bearer). 없으면 401. */
+type PaperAiSummary = {
+  id: number
+  whyRead: string
+  abstractKor: string
+  what: string
+  how: string
+  impact: string
+  model: string
+  updatedAt: string
+  createdAt: string
+}
+
+type AiContent = {
+  whyRead: string
+  abstractKor: string
+  what: string
+  how: string
+  impact: string
+}
+
+/* 피그마 논문_상세페이지(1076:8375)의 "구성"을 따라감.
+   단, 피그마는 1440px 고정 기준이라 수치를 그대로 쓰면 화면에서 과하게 커 보여서
+   타이포/여백은 기존 프로젝트 스케일(컨테이너 860, 본문 14px)을 유지함. */
+
+const NAVY = '#00178E'
+const NAVY_60 = 'rgba(0,23,142,0.6)'
+const INK = '#3C3C43'
+const INK_80 = 'rgba(60,60,67,0.8)'
+const INK_40 = 'rgba(60,60,67,0.4)'
+const GREEN = '#00CA5E'
 
 export default function PaperDetail({
   paper,
@@ -11,58 +51,111 @@ export default function PaperDetail({
   onBack: () => void
 }) {
   const [bookmarked, setBookmarked] = useState(paper.bookmarkCount > 0)
-  const [readStatus, setReadStatus] = useState<'reading' | 'done' | null>(null) // 읽는 중 / 읽기 완료 (하나만, 미선택 가능)
-  const [aiSummary, setAiSummary] = useState<string | null>(null)
-  const [abstractKo, setAbstractKo] = useState<string | null>(null)
-  const [takeaways, setTakeaways] = useState<{ what: string; how: string; soWhat: string } | null>(null)
+  /* 읽는 중 / 읽기 완료 — 하나만, 다시 누르면 해제.
+     localStorage에 저장돼서 논문 목록 카드 뱃지·마이페이지 탭에 함께 반영됨. */
+  const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
+  const readStatus = readMap[paper.arxivId]?.status ?? null
+
+  const toggleReadStatus = (next: ReadStatus) => {
+    setReadStatus(
+      {
+        arxivId: paper.arxivId,
+        title: paper.title,
+        publishedDate: paper.publishedDate,
+        abstract: paper.abstract,
+        fields: getFieldNames(paper),
+      },
+      readStatus === next ? null : next,
+    )
+  }
+  const [ai, setAi] = useState<AiContent | null>(null)
   const [loading, setLoading] = useState(true)
+  const [aiFailed, setAiFailed] = useState<'none' | 'unauthorized' | 'missing'>('none')
+  const [relatedPage, setRelatedPage] = useState(0)
 
   const year = getYear(paper.publishedDate)
   const chips = getFieldNames(paper)
-  const authorsText = getAuthorsText(paper)
+  const authors = getAuthorNames(paper)
   const doiText = paper.doi || paper.arxivId || '-'
   const importance = clampStarTier(paper.starTier)
 
-  const relatedPapers = useMemo(() => {
-    return allPapers
-      .filter(p => p.arxivId !== paper.arxivId)
-      .slice(0, 3)
-  }, [allPapers, paper.arxivId])
+  const related = useMemo(
+    () => allPapers.filter(p => p.arxivId !== paper.arxivId),
+    [allPapers, paper.arxivId],
+  )
+  const relatedPageCount = Math.max(1, Math.ceil(related.length / 3))
+  const relatedPapers = related.slice(relatedPage * 3, relatedPage * 3 + 3)
 
   useEffect(() => {
     setBookmarked(paper.bookmarkCount > 0)
+    setRelatedPage(0)
   }, [paper.arxivId, paper.bookmarkCount])
 
+  /*
+    AI 요약: GET /ai-services/papers/{arxivId}
+      whyRead → "이 논문을 왜 읽어야 할까요?"
+      abstractKor → Abstract KO
+      what / how / impact → Key Takeaways
+
+    토큰이 필요한 API라 비로그인 상태면 401이 뜸.
+    그 경우(그리고 아직 요약이 생성되지 않은 404)에는
+    화면이 비지 않도록 abstract 기반 fallback을 대신 보여줌.
+  */
   useEffect(() => {
+    const arxivId = paper.arxivId
+    let cancelled = false
+
     setLoading(true)
+    setAiFailed('none')
 
-    /*
-      지금 Papers.tsx의 API 응답에는 aiSummary, abstractKo, takeaways가 없어서
-      화면이 깨지지 않도록 abstract 기반 fallback을 넣어둔 상태야.
+    ;(async () => {
+      try {
+        const token = getToken()
+        const res = await fetch(`/api/ai-services/papers/${encodeURIComponent(arxivId)}`, {
+          headers: {
+            Accept: 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
 
-      나중에 백엔드에서 요약 API가 생기면 여기만 fetch로 교체하면 됨.
-      예:
-      const res = await fetch(`${BASE_URL}/papers/${paper.arxivId}/summary`)
-    */
+        if (cancelled) return
 
-    const fallback = buildFallbackAIContent(paper)
+        if (!res.ok) {
+          setAi(buildFallbackAIContent(paper))
+          setAiFailed(res.status === 401 || res.status === 403 ? 'unauthorized' : 'missing')
+          return
+        }
 
-    setAiSummary(fallback.aiSummary)
-    setAbstractKo(fallback.abstractKo)
-    setTakeaways(fallback.takeaways)
-    setLoading(false)
-  }, [paper.arxivId, paper.title, paper.abstract])
+        const data: PaperAiSummary = await res.json()
+        if (cancelled) return
 
-  const baseStyle: CSSProperties = {
-    fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
-  }
+        const fallback = buildFallbackAIContent(paper)
+        setAi({
+          whyRead: data.whyRead || fallback.whyRead,
+          abstractKor: data.abstractKor || fallback.abstractKor,
+          what: data.what || fallback.what,
+          how: data.how || fallback.how,
+          impact: data.impact || fallback.impact,
+        })
+      } catch {
+        if (cancelled) return
+        setAi(buildFallbackAIContent(paper))
+        setAiFailed('missing')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [paper])
 
   return (
     <div style={{
-      ...baseStyle,
+      fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
       width: '100%',
       minHeight: '100vh',
-      background: 'linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)',
+      background: '#F5F9FF',
       boxSizing: 'border-box',
     }}>
       {/* Back button */}
@@ -70,16 +163,10 @@ export default function PaperDetail({
         <button
           onClick={onBack}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '13px',
-            color: '#6b7280',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0',
-            marginBottom: '8px',
+            display: 'flex', alignItems: 'center', gap: '6px',
+            fontSize: '13px', color: INK_80,
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: 0, marginBottom: '8px',
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -89,181 +176,176 @@ export default function PaperDetail({
         </button>
       </div>
 
-      {/* Main content */}
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '12px 48px 64px' }}>
 
-        {/* Title(왼쪽) + Meta 알약(오른쪽) */}
-        <div style={{ display: 'flex', gap: '28px', marginBottom: '36px', alignItems: 'flex-start' }}>
+        {/* ── 헤더: 제목·저자(왼쪽) + 상세 카드 3개(오른쪽) ── */}
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '18px' }}>
 
-          {/* Left: 제목 · 저자 · 액션 */}
+          {/* Left */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{
-              fontSize: '22px', fontWeight: 800, color: '#1a1a1a',
-              lineHeight: 1.4, marginBottom: '14px',
+              fontSize: '22px', fontWeight: 600, color: INK,
+              lineHeight: 1.4, margin: '0 0 18px',
             }}>
               {paper.title}
             </h1>
 
-            <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '4px' }}>
-              발행연도 &nbsp;<strong style={{ color: '#6b7280', fontWeight: 600 }}>{year}</strong>
-            </p>
-            <p style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '14px' }}>
-              저자 &nbsp;<strong style={{ color: '#6b7280', fontWeight: 600 }}>{authorsText}</strong>
-            </p>
-
-            {/* 북마크 / 링크 */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <IconBtn onClick={() => setBookmarked(b => !b)} active={bookmarked}>
-                <svg width="15" height="15" viewBox="0 0 24 24"
-                  fill={bookmarked ? '#3B6FE8' : 'none'}
-                  stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
-                  strokeWidth="2" strokeLinecap="round">
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                </svg>
-              </IconBtn>
-
-              <IconBtn onClick={() => { if (paper.pdfUrl) window.open(paper.pdfUrl, '_blank') }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
-                  <circle cx="18" cy="5" r="3" />
-                  <circle cx="6" cy="12" r="3" />
-                  <circle cx="18" cy="19" r="3" />
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                </svg>
-              </IconBtn>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 500, marginBottom: '18px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <span style={{ color: INK }}>발행연도</span>
+                <span style={{ color: INK_80 }}>{year}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ color: INK, flexShrink: 0 }}>저자</span>
+                {authors.length > 0
+                  ? authors.map((name, i) => <span key={`${name}-${i}`} style={{ color: INK_80 }}>{name}</span>)
+                  : <span style={{ color: INK_80 }}>저자 정보 없음</span>}
+              </div>
             </div>
 
-            {/* 읽는 중 / 읽기 완료 — 하나만 선택 (다시 누르면 해제) */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <ReadStatusBtn
-                active={readStatus === 'reading'}
-                onClick={() => setReadStatus(s => (s === 'reading' ? null : 'reading'))}
-                activeColor="#15803D" activeBg="#E7F6EC" activeBorder="#22C55E"
-                icon={
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" />
-                  </svg>
-                }
+            {/* 북마크 / 원문 링크 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button
+                onClick={() => setBookmarked(b => !b)}
+                aria-label="북마크"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
               >
-                읽는 중
-              </ReadStatusBtn>
-              <ReadStatusBtn
-                active={readStatus === 'done'}
-                onClick={() => setReadStatus(s => (s === 'done' ? null : 'done'))}
-                activeColor="#B45309" activeBg="#FEF3C7" activeBorder="#FBBF24"
+                <BookmarkIcon filled={bookmarked} />
+              </button>
+              <button
+                onClick={() => { if (paper.pdfUrl) window.open(paper.pdfUrl, '_blank') }}
+                aria-label="원문 링크"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
               >
-                읽기 완료
-              </ReadStatusBtn>
+                <LinkIcon />
+              </button>
             </div>
           </div>
 
-          {/* Right: 메타 알약 (중요도 · 태그 · DOI) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '236px', flexShrink: 0 }}>
-            {/* 중요도 */}
-            <MetaPill label="중요도" icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-              </svg>
-            }>
-              <div style={{ display: 'flex', gap: '2px' }}>
+          {/* Right: 중요도 / 태그 / DOI */}
+          <div style={{ width: '250px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <DetailCard icon={<StarIcon size={13} color="#fff" />} label="중요도">
+              <div style={{ display: 'flex', gap: '1px' }}>
                 {Array.from({ length: importance }).map((_, i) => (
-                  <svg key={i} width="15" height="15" viewBox="0 0 24 24" fill="#FBBF24">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
+                  <StarIcon key={i} size={15} color="#FBBF24" />
                 ))}
               </div>
-            </MetaPill>
+            </DetailCard>
 
-            {/* 태그 */}
-            <MetaPill label="태그" icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                <line x1="7" y1="7" x2="7.01" y2="7" />
-              </svg>
-            }>
-              {chips.length > 0 ? (
-                chips.map(chip => (
-                  <span key={chip} style={{
-                    fontSize: '10px', padding: '2px 8px', background: '#fff',
-                    color: '#3B6FE8', borderRadius: '20px', border: '1px solid #c7d7fb',
-                  }}>{chip}</span>
-                ))
-              ) : (
-                <span style={{ fontSize: '11px', color: '#9ca3af' }}>태그 없음</span>
-              )}
-            </MetaPill>
+            <DetailCard icon={<TagIcon size={13} color="#fff" />} label="태그">
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {chips.length > 0
+                  ? chips.map(chip => <TagPill key={chip}>{chip}</TagPill>)
+                  : <span style={{ fontSize: '11px', color: INK_40 }}>태그 없음</span>}
+              </div>
+            </DetailCard>
 
-            {/* DOI */}
-            <MetaPill label="DOI" icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-              </svg>
-            }>
-              <span style={{ fontSize: '10px', color: '#6b7280', fontFamily: 'monospace', wordBreak: 'break-all', textAlign: 'right' }}>
+            <DetailCard icon={<HashIcon size={13} color="#fff" />} label="DOI">
+              <span style={{ fontSize: '10px', fontWeight: 500, color: INK, wordBreak: 'break-all', textAlign: 'right' }}>
                 {doiText}
               </span>
-            </MetaPill>
+            </DetailCard>
           </div>
         </div>
 
-        {/* 이 논문을 왜 읽어야 할까요? */}
-        <Section title="이 논문을 왜 읽어야 할까요?" subtitle="관심 분야 기준으로 핵심 내용을 요약했어요.">
-          <p style={{ fontSize: '14px', color: '#374151', lineHeight: 1.75, margin: 0 }}>
-            {loading ? <Skeleton /> : aiSummary}
-          </p>
-        </Section>
+        {/* 읽는 중 / 읽기 완료 — 하나만 선택 (다시 누르면 해제) */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '2px',
+          background: '#fff', borderRadius: '10px', padding: '5px',
+          marginBottom: '28px',
+        }}>
+          <ReadStatusBtn
+            active={readStatus === 'reading'}
+            onClick={() => toggleReadStatus('reading')}
+            icon={<BookIcon size={15} color={readStatus === 'reading' ? GREEN : INK_40} />}
+          >
+            읽는 중
+          </ReadStatusBtn>
+          <ReadStatusBtn
+            active={readStatus === 'done'}
+            onClick={() => toggleReadStatus('done')}
+            icon={<CheckCircleIcon size={15} color={readStatus === 'done' ? GREEN : INK_40} />}
+          >
+            읽기 완료
+          </ReadStatusBtn>
+        </div>
 
-        {/* Abstract */}
-        <Section title="Abstract">
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#3B6FE8', marginBottom: '8px' }}>EN</div>
-            <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.75, margin: 0 }}>
+        {/* ── 본문 카드 3종 ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+          {/* 이 논문을 왜 읽어야 할까요? */}
+          <Card>
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY, margin: '0 0 6px' }}>
+                이 논문을 왜 읽어야 할까요?
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <AiIcon size={13} color={NAVY_60} />
+                <p style={{ fontSize: '11px', fontWeight: 500, color: NAVY_60, margin: 0 }}>
+                  관심 분야를 바탕으로 AI가 추천 이유를 정리했어요.
+                </p>
+              </div>
+            </div>
+            <Body>{loading ? <Skeleton /> : ai?.whyRead}</Body>
+            {aiFailed !== 'none' && (
+              <p style={{ fontSize: '11px', color: INK_40, margin: '12px 0 0' }}>
+                {aiFailed === 'unauthorized'
+                  ? '로그인하면 AI가 정리한 요약을 볼 수 있어요. (현재는 원문 기반 임시 문구)'
+                  : '아직 AI 요약이 생성되지 않은 논문이에요. (현재는 원문 기반 임시 문구)'}
+              </p>
+            )}
+          </Card>
+
+          {/* Abstract */}
+          <Card>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY_60, margin: '0 0 18px' }}>Abstract</p>
+            <LabeledBlock label="EN">
               {paper.abstract || 'Abstract 정보가 없습니다.'}
-            </p>
+            </LabeledBlock>
+            <Divider />
+            <LabeledBlock label="KO">
+              {loading ? <Skeleton /> : ai?.abstractKor}
+            </LabeledBlock>
+          </Card>
 
-            <hr style={{ border: 'none', borderTop: '1px solid #E3E8F5', margin: '18px 0' }} />
+          {/* Key Takeaways */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '18px' }}>
+              <AiIcon size={13} color={NAVY_60} />
+              <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY_60, margin: 0 }}>Key Takeaways</p>
+            </div>
+            {(['what', 'how', 'impact'] as const).map((key, idx) => (
+              <div key={key}>
+                {idx > 0 && <Divider />}
+                <LabeledBlock label={key.toUpperCase()}>
+                  {loading ? <Skeleton /> : ai?.[key]}
+                </LabeledBlock>
+              </div>
+            ))}
+          </Card>
+        </div>
 
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#3B6FE8', marginBottom: '8px' }}>KO</div>
-            <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.75, margin: 0, minHeight: '40px' }}>
-              {loading ? <Skeleton /> : abstractKo}
-            </p>
-          </div>
-        </Section>
-
-        {/* Key Takeaways */}
-        <Section title="Key Takeaways">
-          <div>
-            {(['what', 'how', 'soWhat'] as const).map((key, idx) => {
-              const labels = { what: 'WHAT', how: 'HOW', soWhat: 'IMPACT' }
-              return (
-                <div key={key}>
-                  {idx > 0 && <hr style={{ border: 'none', borderTop: '1px solid #E3E8F5', margin: '18px 0' }} />}
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#3B6FE8', marginBottom: '8px' }}>
-                    {labels[key]}
-                  </div>
-                  <p style={{ fontSize: '13px', color: '#374151', lineHeight: 1.75, margin: 0, minHeight: '24px' }}>
-                    {loading ? <Skeleton /> : takeaways?.[key]}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        </Section>
-
-        {/* 구분선 */}
-        <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '32px 0' }} />
-
-        {/* 최근 동향 논문 */}
-        <div>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#1a1a1a', marginBottom: '16px' }}>
+        {/* ── 함께 보면 좋은 논문 ── */}
+        <div style={{ marginTop: '48px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 600, color: INK, margin: 0 }}>
             함께 보면 좋은 논문
           </h2>
+          <div style={{ height: '1px', background: INK_40, opacity: 0.35, margin: '16px 0 18px' }} />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-            {relatedPapers.map(rp => (
-              <RelatedCard key={rp.arxivId} paper={rp} />
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CarouselArrow
+              direction="left"
+              disabled={relatedPage === 0}
+              onClick={() => setRelatedPage(p => Math.max(0, p - 1))}
+            />
+            <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              {relatedPapers.map(rp => <RelatedCard key={rp.arxivId} paper={rp} />)}
+            </div>
+            <CarouselArrow
+              direction="right"
+              disabled={relatedPage >= relatedPageCount - 1}
+              onClick={() => setRelatedPage(p => Math.min(relatedPageCount - 1, p + 1))}
+            />
           </div>
         </div>
       </div>
@@ -271,127 +353,102 @@ export default function PaperDetail({
   )
 }
 
-function MetaPill({ label, icon, children }: { label: string; icon: ReactNode; children: ReactNode }) {
+/* ───────── 레이아웃 조각 ───────── */
+
+function Card({ children }: { children: ReactNode }) {
   return (
     <div style={{
+      background: '#fff',
+      borderRadius: '20px',
+      padding: '22px 26px',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function Body({ children }: { children: ReactNode }) {
+  return (
+    <p style={{ fontSize: '14px', fontWeight: 400, color: INK, lineHeight: 1.75, margin: 0 }}>
+      {children}
+    </p>
+  )
+}
+
+function LabeledBlock({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: '12px', fontWeight: 600, color: NAVY, marginBottom: '8px' }}>{label}</div>
+      <Body>{children}</Body>
+    </div>
+  )
+}
+
+function Divider() {
+  return <div style={{ height: '1px', background: '#E3E8F5', margin: '18px 0' }} />
+}
+
+function DetailCard({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div style={{
+      background: '#fff',
+      borderRadius: '14px',
+      padding: '10px 14px',
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
-      background: '#EDF1FB',
-      borderRadius: '999px',
-      padding: '6px 14px 6px 6px',
-      minHeight: '38px',
+      minHeight: '44px',
     }}>
-      {/* 파란 원형 아이콘 */}
       <span style={{
-        width: '26px', height: '26px', borderRadius: '50%',
-        background: '#3B6FE8', flexShrink: 0,
+        width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
+        background: 'linear-gradient(90deg, #4C96FF 0%, #A8B4FF 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {icon}
       </span>
-      <span style={{ fontSize: '11px', color: '#6b7280', fontWeight: 600, flexShrink: 0 }}>
-        {label}
-      </span>
-      <div style={{
-        marginLeft: 'auto', display: 'flex', alignItems: 'center',
-        gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end',
-      }}>
+      <span style={{ fontSize: '11px', fontWeight: 600, color: INK_80, flexShrink: 0 }}>{label}</span>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {children}
       </div>
     </div>
   )
 }
 
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+function TagPill({ children }: { children: ReactNode }) {
   return (
-    <div style={{
-      background: '#F4F6FD',
-      borderRadius: '16px',
-      padding: '22px 26px',
-      marginBottom: '16px',
+    <span style={{
+      border: `1px solid ${NAVY}`,
+      borderRadius: '100px',
+      padding: '2px 7px',
+      fontSize: '10px',
+      fontWeight: 600,
+      color: NAVY,
+      whiteSpace: 'nowrap',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: subtitle ? '4px' : '16px' }}>
-        {/* 파란 스파클 아이콘 */}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="#3B6FE8">
-          <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />
-        </svg>
-        <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#3B6FE8', margin: 0 }}>
-          {title}
-        </h3>
-      </div>
-      {subtitle && (
-        <p style={{ fontSize: '11px', color: '#9ca3af', margin: '0 0 14px', paddingLeft: '20px' }}>
-          {subtitle}
-        </p>
-      )}
       {children}
-    </div>
-  )
-}
-
-function IconBtn({
-  onClick,
-  children,
-  active,
-}: {
-  onClick: () => void
-  children: ReactNode
-  active?: boolean
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '32px',
-        height: '32px',
-        borderRadius: '8px',
-        border: `1px solid ${active ? '#c7d7fb' : '#e5e7eb'}`,
-        background: active ? '#EEF3FF' : '#fff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-      }}
-    >
-      {children}
-    </button>
+    </span>
   )
 }
 
 function ReadStatusBtn({
-  active,
-  onClick,
-  children,
-  icon,
-  activeColor,
-  activeBg,
-  activeBorder,
+  active, onClick, children, icon,
 }: {
   active: boolean
   onClick: () => void
   children: ReactNode
-  icon?: ReactNode
-  activeColor: string
-  activeBg: string
-  activeBorder: string
+  icon: ReactNode
 }) {
   return (
     <button
       onClick={onClick}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '5px',
-        padding: '7px 16px',
-        fontSize: '12px',
-        fontWeight: active ? 700 : 600,
-        borderRadius: '20px',
-        border: `1.5px solid ${active ? activeBorder : '#D7DCE5'}`,
-        background: active ? activeBg : '#fff',
-        color: active ? activeColor : '#9ca3af',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
+        display: 'flex', alignItems: 'center', gap: '5px',
+        padding: '7px 12px',
+        borderRadius: '8px', border: 'none', cursor: 'pointer',
+        background: active ? 'rgba(0,202,94,0.1)' : 'transparent',
+        color: active ? GREEN : INK_40,
+        fontSize: '12px', fontWeight: 500, fontFamily: 'inherit',
+        transition: 'background 0.15s, color 0.15s',
       }}
     >
       {icon}
@@ -400,10 +457,36 @@ function ReadStatusBtn({
   )
 }
 
+function CarouselArrow({
+  direction, onClick, disabled,
+}: {
+  direction: 'left' | 'right'
+  onClick: () => void
+  disabled: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={direction === 'left' ? '이전' : '다음'}
+      style={{
+        width: '20px', height: '40px', flexShrink: 0,
+        background: 'none', border: 'none', padding: 0,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.25 : 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'opacity 0.15s',
+      }}
+    >
+      <ChevronIcon direction={direction} size={18} color={INK_80} />
+    </button>
+  )
+}
+
 function Skeleton() {
   return (
-    <div style={{
-      height: '16px',
+    <span style={{
+      display: 'inline-block', width: '100%', height: '16px', verticalAlign: 'middle',
       background: 'linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)',
       backgroundSize: '200% 100%',
       borderRadius: '6px',
@@ -412,85 +495,148 @@ function Skeleton() {
       <style>
         {`@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}
       </style>
-    </div>
+    </span>
   )
 }
 
 function RelatedCard({ paper }: { paper: Paper }) {
   const year = getYear(paper.publishedDate)
   const chips = getFieldNames(paper)
-  const tag = chips[0] ?? '분야 없음'
 
   return (
     <div
       style={{
         background: '#fff',
-        borderRadius: '12px',
+        borderRadius: '14px',
         padding: '14px',
-        border: '1px solid #e5e7eb',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
         cursor: 'pointer',
         transition: 'box-shadow 0.2s',
       }}
-      onMouseEnter={e => {
-        ;(e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(59,111,232,0.1)'
-      }}
-      onMouseLeave={e => {
-        ;(e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
-      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,23,142,0.1)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{
-          fontSize: '11px',
-          padding: '2px 8px',
-          background: '#f3f4f6',
-          color: '#6b7280',
-          borderRadius: '6px',
-        }}>
-          {tag}
-        </span>
-
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-        </svg>
-      </div>
-
-      <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>
-        {year}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: '11px', color: INK }}>{year}</span>
+        <BookmarkIcon filled={paper.bookmarkCount > 0} small />
       </div>
 
       <p style={{
-        fontSize: '12px',
-        fontWeight: 600,
-        color: '#1a1a1a',
-        lineHeight: 1.5,
-        margin: '0 0 8px',
-        display: '-webkit-box',
-        WebkitLineClamp: 4,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
+        fontSize: '12px', fontWeight: 500, color: INK, margin: 0, lineHeight: 1.5,
+        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       } as CSSProperties}>
         {paper.title}
       </p>
 
+      <div style={{ height: '1px', background: INK_40, opacity: 0.5 }} />
+
+      <p style={{
+        fontSize: '11px', color: INK_80, margin: 0, lineHeight: 1.5,
+        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      } as CSSProperties}>
+        {paper.abstract}
+      </p>
+
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-        {chips.map(chip => (
-          <span
-            key={chip}
-            style={{
-              fontSize: '10px',
-              padding: '2px 6px',
-              background: '#EEF3FF',
-              color: '#3B6FE8',
-              borderRadius: '20px',
-            }}
-          >
-            {chip}
-          </span>
-        ))}
+        {chips.slice(0, 3).map(chip => <TagPill key={chip}>{chip}</TagPill>)}
       </div>
     </div>
   )
 }
+
+/* ───────── 아이콘 ───────── */
+
+function BookmarkIcon({ filled, small }: { filled: boolean; small?: boolean }) {
+  const w = small ? 11 : 15
+  const h = small ? 15 : 21
+  return (
+    <svg width={w} height={h} viewBox="0 0 22 31" fill="none">
+      <path
+        d="M1 3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v26l-10-7-10 7V3z"
+        fill={filled ? '#3B82F6' : 'none'}
+        stroke={filled ? '#3B82F6' : INK_40}
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function LinkIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={INK_80} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  )
+}
+
+function StarIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M12 2.6l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.4l-5.8 3.06 1.1-6.46-4.69-4.58 6.49-.94L12 2.6z" />
+    </svg>
+  )
+}
+
+function TagIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M11.6 2H4a2 2 0 0 0-2 2v7.6c0 .53.21 1.04.59 1.41l8.4 8.4a2 2 0 0 0 2.82 0l7.6-7.6a2 2 0 0 0 0-2.82L13 2.59A2 2 0 0 0 11.6 2zM7 8.5A1.5 1.5 0 1 1 8.5 7 1.5 1.5 0 0 1 7 8.5z" />
+    </svg>
+  )
+}
+
+function HashIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.4" strokeLinecap="round">
+      <path d="M9 3L7 21M17 3l-2 18M3.5 8.5h17M3 15.5h17" />
+    </svg>
+  )
+}
+
+function BookIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5V4.5z" />
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5z" />
+    </svg>
+  )
+}
+
+function CheckCircleIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M8 12.4l2.7 2.7L16 9.8" />
+    </svg>
+  )
+}
+
+function AiIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M11 2l1.7 4.9L17.6 8.6l-4.9 1.7L11 15.2 9.3 10.3 4.4 8.6l4.9-1.7L11 2z" />
+      <path d="M18 14l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9L18 14z" />
+    </svg>
+  )
+}
+
+function ChevronIcon({ direction, size, color }: { direction: 'left' | 'right'; size: number; color: string }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: direction === 'right' ? 'rotate(180deg)' : undefined }}
+    >
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  )
+}
+
+/* ───────── 데이터 헬퍼 ───────── */
 
 function getYear(date?: string) {
   if (!date) return '연도 정보 없음'
@@ -501,13 +647,10 @@ function getFieldNames(paper: Paper) {
   return paper.researchFields?.map(field => field.name).filter(Boolean) ?? []
 }
 
-function getAuthorsText(paper: Paper) {
+function getAuthorNames(paper: Paper) {
   const authors = paper.authors?.map(author => author.name).filter(Boolean) ?? []
-
-  if (authors.length === 0) return '저자 정보 없음'
-  if (authors.length <= 3) return authors.join(', ')
-
-  return `${authors.slice(0, 3).join(', ')} 외 ${authors.length - 3}명`
+  if (authors.length <= 3) return authors
+  return [...authors.slice(0, 3), `외 ${authors.length - 3}명`]
 }
 
 function clampStarTier(value?: number) {
@@ -515,7 +658,8 @@ function clampStarTier(value?: number) {
   return Math.max(1, Math.min(5, Math.round(value)))
 }
 
-function buildFallbackAIContent(paper: Paper) {
+// AI 요약을 못 가져왔을 때(비로그인·미생성) 화면이 비지 않도록 쓰는 대체 문구
+function buildFallbackAIContent(paper: Paper): AiContent {
   const abstract = paper.abstract?.trim()
   const title = paper.title?.trim()
 
@@ -524,27 +668,25 @@ function buildFallbackAIContent(paper: Paper) {
     : ''
 
   return {
-    aiSummary: firstSentence
+    whyRead: firstSentence
       ? truncate(firstSentence, 140)
       : `${title}에 대한 핵심 내용을 확인할 수 있는 논문입니다.`,
 
-    abstractKo: abstract
+    abstractKor: abstract
       ? '번역 API 연결 전이므로 현재는 원문 Abstract를 기준으로 내용을 확인하세요.'
       : 'Abstract 정보가 없습니다.',
 
-    takeaways: {
-      what: title
-        ? `"${truncate(title, 80)}" 주제를 중심으로 한 연구입니다.`
-        : '이 논문이 다루는 주제 정보를 불러오지 못했습니다.',
+    what: title
+      ? `"${truncate(title, 80)}" 주제를 중심으로 한 연구입니다.`
+      : '이 논문이 다루는 주제 정보를 불러오지 못했습니다.',
 
-      how: abstract
-        ? '논문의 Abstract를 기반으로 문제 정의, 접근 방식, 실험 또는 분석 내용을 확인할 수 있습니다.'
-        : '방법론 정보가 아직 제공되지 않았습니다.',
+    how: abstract
+      ? '논문의 Abstract를 기반으로 문제 정의, 접근 방식, 실험 또는 분석 내용을 확인할 수 있습니다.'
+      : '방법론 정보가 아직 제공되지 않았습니다.',
 
-      soWhat: paper.citationCount || paper.influenceScore
-        ? `인용수 ${paper.citationCount ?? 0}, 영향도 ${paper.influenceScore ?? 0} 정보를 함께 참고해 중요도를 판단할 수 있습니다.`
-        : '관련 분야의 흐름을 파악하는 데 참고할 수 있는 논문입니다.',
-    },
+    impact: paper.citationCount || paper.influenceScore
+      ? `인용수 ${paper.citationCount ?? 0}, 영향도 ${paper.influenceScore ?? 0} 정보를 함께 참고해 중요도를 판단할 수 있습니다.`
+      : '관련 분야의 흐름을 파악하는 데 참고할 수 있는 논문입니다.',
   }
 }
 
