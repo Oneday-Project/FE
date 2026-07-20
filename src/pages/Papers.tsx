@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useSyncExternalStore } from 'react'
+import { useNavigate } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
+import ReadStatusTag from '../components/ReadStatusTag'
+import { isLoggedIn } from '../lib/auth'
+import { subscribeReadStatus, getReadStatusSnapshot } from '../lib/readStatus'
 
 const tags = ['SML', 'ML', 'CV', 'NLP', 'Robotics', 'Retrieval AI', 'SAP', 'HCI', 'Multimodal', 'Code AI']
 const MAX_TAGS = 3 // 분야는 최대 3개까지 선택
@@ -34,6 +38,17 @@ export default function Papers() {
   const [searchFocused, setSearchFocused] = useState(false)
   const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null)
+  const [showLoginGate, setShowLoginGate] = useState(false)   // 비로그인 상태로 카드를 눌렀을 때
+  const navigate = useNavigate()
+
+  // 논문 상세는 회원 전용 — 비로그인이면 상세로 넘기지 않고 안내 모달을 띄움
+  const handleCardClick = (paper: Paper) => {
+    if (!isLoggedIn()) {
+      setShowLoginGate(true)
+      return
+    }
+    setSelectedPaper(paper)
+  }
 
   const [papers, setPapers] = useState<Paper[]>([])
   const [loading, setLoading] = useState(true)
@@ -300,7 +315,7 @@ export default function Papers() {
               papers={papers}
               bookmarks={bookmarks}
               onBookmark={toggleBookmark}
-              onCardClick={setSelectedPaper}
+              onCardClick={handleCardClick}
             />
             <div style={{ height: '48px' }} />
             <PaperSection
@@ -309,7 +324,7 @@ export default function Papers() {
               papers={papers}
               bookmarks={bookmarks}
               onBookmark={toggleBookmark}
-              onCardClick={setSelectedPaper}
+              onCardClick={handleCardClick}
             />
             {/* hasNext가 true일 때만 더보기 버튼 표시 */}
             {hasNext && (
@@ -328,6 +343,84 @@ export default function Papers() {
             )}
           </>
         )}
+      </div>
+
+      {/* 비로그인 상태로 논문 카드를 눌렀을 때 (피그마 Frame 622) */}
+      {showLoginGate && (
+        <LoginGateModal
+          onClose={() => setShowLoginGate(false)}
+          onLogin={() => navigate('/login')}
+        />
+      )}
+    </div>
+  )
+}
+
+// 회원 전용 안내 모달 — 논문 상세는 로그인해야 볼 수 있음
+function LoginGateModal({ onClose, onLogin }: { onClose: () => void; onLogin: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(71, 78, 94, 0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '360px', maxWidth: '90%',
+          background: '#fff', borderRadius: '16px',
+          padding: '48px 50px 46px',
+          boxSizing: 'border-box',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+        }}
+      >
+        {/* 닫기 */}
+        <button
+          onClick={onClose}
+          aria-label="닫기"
+          style={{
+            position: 'absolute', top: '12px', right: '12px',
+            width: '26px', height: '26px',
+            border: 'none', background: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3C3C43" strokeWidth="2" strokeLinecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+
+        {/* 아이콘 — public/personal-privacy.svg */}
+        <img
+          src="/personal-privacy.svg"
+          alt=""
+          style={{ width: '78px', height: '78px', marginBottom: '26px' }}
+        />
+
+        <p style={{
+          fontSize: '16px', fontWeight: 500, color: '#3C3C43',
+          margin: '0 0 24px', textAlign: 'center',
+        }}>
+          회원만 접근 가능한 페이지입니다.
+        </p>
+
+        <button
+          onClick={onLogin}
+          style={{
+            width: '100%', height: '46px',
+            background: '#00178E', color: '#fff',
+            border: 'none', borderRadius: '8px',
+            fontSize: '15px', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+          }}
+        >
+          로그인하러 가기
+        </button>
       </div>
     </div>
   )
@@ -494,8 +587,11 @@ function PaperCard({
   onClick: () => void
 }) {
   const year = paper.publishedDate?.slice(0, 4) ?? '' // 출판연도 (앞 4자리)
-  const tag = paper.researchFields?.[0]?.name ?? '' // 첫 번째 분야 태그
   const chips = paper.researchFields?.map(f => f.name) ?? [] // 분야 칩 전체
+
+  // 상세 페이지에서 지정한 읽음 상태 (localStorage 공유)
+  const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
+  const readStatus = readMap[paper.arxivId]?.status ?? null
   const authorsText = paper.authors?.slice(0, 3).map(a => a.name).join(', ') ?? '' // 저자 최대 3명
 
   return (
@@ -517,14 +613,8 @@ function PaperCard({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {/* 분야 태그 뱃지 */}
-        <span style={{
-          fontSize: '11px', fontWeight: 600, color: '#3DA35D',
-          background: '#E6F6EC', border: '1px solid #BFE7CC',
-          borderRadius: '7px', padding: '3px 9px',
-        }}>
-          {tag || '논문태그'}
-        </span>
+        {/* 읽음 상태 뱃지 — 상세 페이지에서 설정한 값. 없으면 빈 자리 */}
+        <ReadStatusTag status={readStatus} />
         {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지) */}
         <button
           onClick={e => { e.stopPropagation(); onBookmark() }}
