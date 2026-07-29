@@ -4,7 +4,7 @@ import type { ReadStatus } from '../lib/readStatus'
 export default function ReadStatusTag({ status }: { status: ReadStatus | null }) {
   if (!status) return <span style={{ height: '24px' }} />
 
-  const reading = status === 'reading'
+  const reading = status === 'reading' // 그 외(completed)는 '읽기 완료'
   const color = reading ? '#00B454' : '#F59E0B'
   const background = reading ? 'rgba(0,202,94,0.12)' : 'rgba(245,158,11,0.12)'
 

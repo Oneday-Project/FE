@@ -262,9 +262,9 @@ export default function PaperDetail({
             읽는 중
           </ReadStatusBtn>
           <ReadStatusBtn
-            active={readStatus === 'done'}
-            onClick={() => toggleReadStatus('done')}
-            icon={<CheckCircleIcon size={15} color={readStatus === 'done' ? GREEN : INK_40} />}
+            active={readStatus === 'completed'}
+            onClick={() => toggleReadStatus('completed')}
+            icon={<CheckCircleIcon size={15} color={readStatus === 'completed' ? GREEN : INK_40} />}
           >
             읽기 완료
           </ReadStatusBtn>
