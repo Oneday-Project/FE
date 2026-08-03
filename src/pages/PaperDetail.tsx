@@ -644,7 +644,7 @@ function getYear(date?: string) {
 }
 
 function getFieldNames(paper: Paper) {
-  return paper.researchFields?.map(field => field.name).filter(Boolean) ?? []
+  return paper.researchFields?.filter(Boolean) ?? []
 }
 
 function getAuthorNames(paper: Paper) {

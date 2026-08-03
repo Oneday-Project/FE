@@ -1,8 +1,9 @@
 // 논문 읽음 상태(읽는 중 / 읽기 완료) 관리 — 서버 연동
 //
-//   GET  /users/me                                   → readingPapers[] (읽는 중·완료 모두)
-//   POST /papers/paper/{arxivId}/reading-status      → 읽는 중 토글(시작/취소)
-//   POST /papers/paper/{arxivId}/reading-status/complete → 읽기 완료로 전환
+//   GET  /papers/library?type=reading|completed             → 읽는 중 / 다 읽은 목록
+//   POST /papers/paper/{arxivId}/reading-status/reading     → 일반 논문 읽는중 토글
+//   POST /papers/paper/{arxivId}/reading-status/complete    → 일반 논문 읽기 완료
+//   POST /papers/hai-papers/{id}/reading-status(/complete)  → 휴먼AI 논문
 //
 // 논문 상세·목록·메인·마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
@@ -46,64 +47,54 @@ function authHeaders(): HeadersInit {
   }
 }
 
-// /users/me 의 readingPapers[] 를 화면용 map 으로 변환
-type RawReadingPaper = {
-  paperId?: string
-  status?: string
-  startedAt?: string
-  completedAt?: string
-  paper?: {
-    arxivId?: string
-    title?: string
-    publishedDate?: string
-    abstract?: string
-    researchFields?: { name?: string }[]
-  }
+/* GET /papers/library?type=reading|completed 항목
+   { type: "paper"|"hai", id, title, publishedDate, tags[], isBookmark, readingStatus } */
+type LibraryItem = {
+  type?: string
+  id?: string | number
+  title?: string
+  publishedDate?: string
+  tags?: string[]
+  readingStatus?: string
 }
 
-function toEntry(raw: RawReadingPaper): ReadEntry | null {
-  const arxivId = raw.paper?.arxivId ?? raw.paperId
+// 일반 논문은 arxivId(문자열), 휴먼AI는 "hai-{id}" 로 키를 통일 (목록 카드와 동일 규칙)
+function keyOf(item: LibraryItem): string | null {
+  if (item.id == null) return null
+  return item.type === 'hai' ? `hai-${item.id}` : String(item.id)
+}
+
+function toEntry(item: LibraryItem): ReadEntry | null {
+  const arxivId = keyOf(item)
   if (!arxivId) return null
-  const status: ReadStatus = raw.status === 'completed' ? 'completed' : 'reading'
+  const status: ReadStatus = item.readingStatus === 'completed' ? 'completed' : 'reading'
   return {
     status,
-    savedAt: raw.completedAt ?? raw.startedAt ?? new Date().toISOString(),
+    savedAt: new Date().toISOString(),
     paper: {
       arxivId,
-      title: raw.paper?.title ?? '',
-      publishedDate: raw.paper?.publishedDate,
-      abstract: raw.paper?.abstract,
-      fields: raw.paper?.researchFields?.map(f => f.name).filter((n): n is string => !!n) ?? [],
+      title: item.title ?? '',
+      publishedDate: item.publishedDate,
+      abstract: undefined, // library 응답엔 초록 없음
+      fields: item.tags ?? [],
     },
   }
 }
 
-// 휴먼AI 논문 읽음 항목 — 필드명이 확실치 않아 haiPaper / hai_paper / paper 를 모두 시도
-type RawHaiReadingPaper = {
-  status?: string
-  startedAt?: string
-  completedAt?: string
-  haiPaper?: { id?: number; title?: string; publishedYear?: string; abstract?: string; department?: string }
-  hai_paper?: { id?: number; title?: string; publishedYear?: string; abstract?: string; department?: string }
-  haiPaperId?: number
-}
-
-function toHaiEntry(raw: RawHaiReadingPaper): ReadEntry | null {
-  const hai = raw.haiPaper ?? raw.hai_paper
-  const id = hai?.id ?? raw.haiPaperId
-  if (id == null) return null
-  const status: ReadStatus = raw.status === 'completed' ? 'completed' : 'reading'
-  return {
-    status,
-    savedAt: raw.completedAt ?? raw.startedAt ?? new Date().toISOString(),
-    paper: {
-      arxivId: `hai-${id}`,
-      title: hai?.title ?? '',
-      publishedDate: hai?.publishedYear ? `${hai.publishedYear}-01-01` : undefined,
-      abstract: hai?.abstract,
-      fields: hai?.department ? [hai.department] : [],
-    },
+// 한 종류(reading/completed)를 페이지 끝까지 모아옴
+async function fetchLibrary(type: 'reading' | 'completed'): Promise<LibraryItem[]> {
+  const all: LibraryItem[] = []
+  let page = 1
+  // 안전장치: 최대 20페이지까지만
+  for (; page <= 20; page++) {
+    const res = await fetch(`/api/papers/library?type=${type}&take=100&page=${page}`, { headers: authHeaders() })
+    if (!res.ok) break
+    const json = await res.json()
+    const items: LibraryItem[] = json.data ?? []
+    all.push(...items)
+    if (page >= (json.totalPages ?? 1)) break
   }
+  return all
 }
 
 // 최초 구독 시 한 번 서버에서 불러옴 (비로그인이면 건너뜀)
@@ -112,21 +103,15 @@ function ensureLoaded(): void {
 
   loading = (async () => {
     try {
-      const res = await fetch('/api/users/me', { headers: authHeaders() })
-      if (!res.ok) return
+      // 읽는 중 + 다 읽은 논문을 모두 불러와 하나의 map 으로
+      const [reading, completed] = await Promise.all([
+        fetchLibrary('reading'),
+        fetchLibrary('completed'),
+      ])
 
-      const me = await res.json()
       const next: ReadStatusMap = {}
-
-      // 일반 논문
-      for (const item of me?.readingPapers ?? []) {
+      for (const item of [...reading, ...completed]) {
         const entry = toEntry(item)
-        if (entry) next[entry.paper.arxivId] = entry
-      }
-
-      // 휴먼AI 논문 — arxivId 대신 "hai-{id}" 키로 저장 (목록 카드와 동일 규칙)
-      for (const item of me?.readingHaiPapers ?? []) {
-        const entry = toHaiEntry(item)
         if (entry) next[entry.paper.arxivId] = entry
       }
 
@@ -156,20 +141,23 @@ export async function setReadStatus(paper: SavedPaper, next: ReadStatus | null):
   const current = cache[paper.arxivId]?.status ?? null
   const optimistic = { ...cache }
 
-  // 휴먼AI 논문은 arxivId가 "hai-{id}" 로 인코딩돼 있어 엔드포인트가 다름
-  //   일반: /papers/paper/{arxivId}/reading-status
-  //   휴먼AI: /papers/hai-papers/{id}/reading-status
+  /* 휴먼AI 논문은 arxivId가 "hai-{id}" 로 인코딩돼 있어 엔드포인트가 다름.
+     읽는중 토글 경로도 종류마다 다름:
+       일반   → /papers/paper/{arxivId}/reading-status/reading
+       휴먼AI → /papers/hai-papers/{id}/reading-status   (suffix 없음)
+     완료는 둘 다 base + /complete */
   const isHai = paper.arxivId.startsWith('hai-')
   const base = isHai
     ? `/api/papers/hai-papers/${encodeURIComponent(paper.arxivId.slice(4))}/reading-status`
     : `/api/papers/paper/${encodeURIComponent(paper.arxivId)}/reading-status`
+  const readingUrl = isHai ? base : `${base}/reading`
 
   let url: string
 
   if (next === null) {
-    // 해제: 서버는 reading 토글만 지원 → 그 엔드포인트로 취소
+    // 해제: 읽는중 토글 엔드포인트로 취소
     delete optimistic[paper.arxivId]
-    url = base
+    url = readingUrl
   } else if (next === 'completed') {
     optimistic[paper.arxivId] = { status: 'completed', savedAt: new Date().toISOString(), paper }
     url = `${base}/complete`
@@ -177,7 +165,7 @@ export async function setReadStatus(paper: SavedPaper, next: ReadStatus | null):
     // 'reading' — 이미 reading이면 토글로 꺼짐
     if (current === 'reading') delete optimistic[paper.arxivId]
     else optimistic[paper.arxivId] = { status: 'reading', savedAt: new Date().toISOString(), paper }
-    url = base
+    url = readingUrl
   }
 
   emit(optimistic)

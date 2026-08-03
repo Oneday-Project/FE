@@ -1,9 +1,10 @@
 import { useState, useEffect, useSyncExternalStore } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
 import ReadStatusTag from '../components/ReadStatusTag'
-import { isLoggedIn } from '../lib/auth'
+import { isLoggedIn, getToken } from '../lib/auth'
 import { subscribeReadStatus, getReadStatusSnapshot } from '../lib/readStatus'
+import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from '../lib/bookmarks'
 
 const tags = ['SML', 'ML', 'CV', 'NLP', 'Robotics', 'Retrieval AI', 'SAP', 'HCI', 'Multimodal', 'Code AI']
 const MAX_TAGS = 3 // 분야는 최대 3개까지 선택
@@ -15,7 +16,7 @@ export type Paper = {
   title: string
   authors: { id: number; name: string; authorId: string }[]
   abstract: string
-  researchFields: { id: number; name: string }[]
+  researchFields: string[]   // 백엔드가 ["AI","HCI"] 형태의 문자열 배열로 내려줌
   publishedDate: string
   citationCount: number
   influenceScore: number
@@ -28,6 +29,48 @@ export type Paper = {
 // vite.config.ts의 proxy 설정 덕분에 '/api'로 시작하면 ngrok 주소로 자동 연결됨
 const API_PREFIX = '/api'
 
+// GET /papers, /papers/hai-papers 모두 토큰이 필요함
+function authHeaders(): HeadersInit {
+  const token = getToken()
+  return {
+    Accept: 'application/json',
+    'ngrok-skip-browser-warning': 'true', // ngrok 경고 페이지 스킵
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
+/* 휴먼AI공학전공 논문 (GET /papers/hai-papers)
+   일반 논문(Paper)과 필드가 달라서 별도 타입으로 받고 변환해서 쓴다. */
+type HaiPaper = {
+  id: number
+  doi?: string
+  title: string
+  authors?: string[]
+  academic_advisor?: string
+  department?: string
+  abstract?: string
+  publishedYear?: string
+  pdfUrl?: string
+}
+
+function toPaper(hai: HaiPaper): Paper {
+  return {
+    arxivId: `hai-${hai.id}`,          // 카드 key 용 (북마크 API는 지원 안 함)
+    doi: hai.doi ?? null,
+    title: hai.title,
+    authors: (hai.authors ?? []).map((name, i) => ({ id: i, name, authorId: String(i) })),
+    abstract: hai.abstract ?? '',
+    researchFields: hai.department ? [hai.department] : [],
+    publishedDate: hai.publishedYear ? `${hai.publishedYear}-01-01` : '',
+    citationCount: 0,
+    influenceScore: 0,
+    journal: '',
+    pdfUrl: hai.pdfUrl ?? '',
+    bookmarkCount: 0,
+    starTier: 0,
+  }
+}
+
 const importanceOptions = [1, 2, 3]
 
 export default function Papers() {
@@ -36,10 +79,16 @@ export default function Papers() {
   const [period, setPeriod] = useState<'1y' | '3y' | '5y' | 'custom' | null>(null) // 연도: 1개만 (미선택 가능)
   const [searchValue, setSearchValue] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [bookmarks, setBookmarks] = useState<Record<string, boolean>>({})
-  const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null)
+  const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarksSnapshot)
   const [showLoginGate, setShowLoginGate] = useState(false)   // 비로그인 상태로 카드를 눌렀을 때
   const navigate = useNavigate()
+
+  /* 상세는 URL 쿼리(?paper=<arxivId>)로 연다.
+     → 마이페이지·메인 카드에서도 navigate('/papers?paper=...') 로 바로 진입 가능,
+       뒤로가기/새로고침도 자연스럽게 동작한다. */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const paperParam = searchParams.get('paper')
+  const [fetchedPaper, setFetchedPaper] = useState<Paper | null>(null)
 
   // 논문 상세는 회원 전용 — 비로그인이면 상세로 넘기지 않고 안내 모달을 띄움
   const handleCardClick = (paper: Paper) => {
@@ -47,10 +96,11 @@ export default function Papers() {
       setShowLoginGate(true)
       return
     }
-    setSelectedPaper(paper)
+    setSearchParams({ paper: paper.arxivId })
   }
 
   const [papers, setPapers] = useState<Paper[]>([])
+  const [haiPapers, setHaiPapers] = useState<Paper[]>([])   // 휴먼AI공학전공 논문 (별도 API)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null) // 다음 페이지 커서
@@ -59,7 +109,31 @@ export default function Papers() {
   // 컴포넌트 처음 마운트될 때 논문 자동 불러오기
   useEffect(() => {
     fetchPapers()
+    fetchHaiPapers()
   }, [])
+
+  /* 휴먼AI공학전공 논문 — GET /papers/hai-papers
+     일반 논문과 응답 형태가 달라서(publishedYear, authors: string[], researchFields 없음)
+     화면에서 쓰는 Paper 모양으로 변환해서 사용한다. */
+  const fetchHaiPapers = async () => {
+    try {
+      const res = await fetch(`${API_PREFIX}/papers/hai-papers`, { headers: authHeaders() })
+
+      if (!res.ok) {
+        console.error('휴먼AI 논문 불러오기 실패:', res.status, await res.text())
+        return
+      }
+
+      const json = await res.json()
+      console.log('📦 휴먼AI 논문 응답:', json)
+
+      const list: HaiPaper[] = Array.isArray(json) ? json : json.data ?? json.haiPapers ?? []
+      setHaiPapers(list.map(toPaper))
+    } catch (e) {
+      // 실패해도 일반 논문 목록은 보여야 하므로 화면은 그대로 두고 로그만 남김
+      console.error('휴먼AI 논문 요청 오류:', e)
+    }
+  }
 
   const fetchPapers = async (cursor?: string) => {
     setLoading(true)
@@ -69,17 +143,18 @@ export default function Papers() {
       const params = new URLSearchParams()
       if (cursor) params.set('cursor', cursor) // 더보기 클릭 시 커서 파라미터 추가
 
-      // 키워드 검색: 백엔드에서 동작 확인됨 (keyword=Qwen → 결과 좁혀짐)
+      // 키워드 검색 (keyword=Qwen → 결과 좁혀짐, 백엔드는 최소 2글자 요구)
       if (searchValue.trim()) params.set('keyword', searchValue.trim())
 
-      // ⚠️ 분야/중요도/연도: 백엔드 파라미터명이 아직 미확정이라 전송 보류.
-      //   - 분야: 백엔드는 arXiv 코드(cs.AI, cs.CV …)를 쓰므로 UI 태그(SML/CV…)와 매핑 필요
-      //   - 중요도: starTier(1~3) 로 추정되나 필터 파라미터명 미확인
-      //   - 연도: publishedDate 기준, 파라미터 형식 미확인
-      //   → Swagger의 GET /papers "Parameters"에서 실제 이름 확인되면 아래처럼 연결:
-      // if (selectedTags.length) params.set('<분야파라미터>', selectedTags.map(uiTagToArxiv).join(','))
-      // if (importance != null) params.set('<중요도파라미터>', String(importance))
-      // if (period) params.set('<연도파라미터>', period)
+      // 분야: UI 태그가 백엔드 코드와 동일(AI/CV/NLP…) → 그대로 반복 파라미터로 전송 (OR 필터)
+      selectedTags.forEach(tag => params.append('tags', tag))
+
+      // 중요도: starTier(1~3)
+      if (importance != null) params.set('starTier', String(importance))
+
+      // 연도: 최근 N년 (기간 직접 설정 'custom'은 날짜 입력 UI가 없어 아직 미연결)
+      const yearRange = period === '1y' ? 1 : period === '3y' ? 3 : period === '5y' ? 5 : null
+      if (yearRange) params.set('yearRange', String(yearRange))
 
       const query = params.toString()
       // 실제 요청 URL: /api/papers → vite proxy → ngrok → 백엔드
@@ -87,10 +162,7 @@ export default function Papers() {
 
       const res = await fetch(url, {
         method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'ngrok-skip-browser-warning': 'true', // ngrok 경고 페이지 스킵
-        },
+        headers: authHeaders(), // /papers 는 토큰이 필요함 (없으면 401)
       })
 
       // ✅ Network 탭에서 Status 200이면 연결 성공
@@ -113,13 +185,7 @@ export default function Papers() {
       setNextCursor(Array.isArray(json) ? null : json.nextCursor ?? null)
       setHasNext(Array.isArray(json) ? false : json.hasNext ?? false)
 
-      // 북마크 초기화 (bookmarkCount > 0이면 북마크된 것으로 표시)
-      setBookmarks(prev => ({
-        ...prev,
-        ...Object.fromEntries(
-          fetched.map((p: Paper) => [p.arxivId, p.bookmarkCount > 0])
-        ),
-      }))
+      // 북마크 상태는 lib/bookmarks 에서 /users/me 기준으로 관리함
     } catch (e) {
       // ❌ 실패 시 여기서 에러 출력 → F12 Console 탭에서 확인
       console.error('논문 불러오기 실패:', e)
@@ -149,19 +215,70 @@ export default function Papers() {
     fetchPapers()  // 커서 없이 → 첫 페이지부터 현재 필터로 다시 조회
   }
 
-  // 북마크 토글 (현재는 로컬 상태만 변경, 백엔드 연동 필요하면 API 호출 추가)
-  const toggleBookmark = (arxivId: string) => {
-    setBookmarks(prev => ({ ...prev, [arxivId]: !prev[arxivId] }))
+  // 북마크 토글 — POST /papers/bookmark/{arxivId} (낙관적 업데이트, 실패 시 되돌림)
+  const handleBookmark = (paper: Paper) => {
+    void toggleBookmark({
+      arxivId: paper.arxivId,
+      title: paper.title,
+      publishedDate: paper.publishedDate,
+      abstract: paper.abstract,
+      fields: paper.researchFields ?? [],
+    })
   }
 
-  // 논문 카드 클릭 시 상세 페이지로 전환
-  if (selectedPaper) {
+  // URL 의 ?paper= 로 지정된 논문 (목록에 있으면 그걸 쓰고, 없으면 단일 API로 받아온 것)
+  const selectedPaper: Paper | null = paperParam
+    ? (papers.find(p => p.arxivId === paperParam)
+        ?? haiPapers.find(p => p.arxivId === paperParam)
+        ?? (fetchedPaper?.arxivId === paperParam ? fetchedPaper : null))
+    : null
+
+  // 목록에 없는 논문(마이페이지 등에서 직접 링크로 진입)이면 단일 API로 가져옴
+  useEffect(() => {
+    if (!paperParam || selectedPaper) return
+
+    let cancelled = false
+    ;(async () => {
+      const isHai = paperParam.startsWith('hai-')
+      const url = isHai
+        ? `${API_PREFIX}/papers/hai-papers/${encodeURIComponent(paperParam.slice(4))}`
+        : `${API_PREFIX}/papers/paper/${encodeURIComponent(paperParam)}`
+
+      try {
+        const res = await fetch(url, { headers: authHeaders() })
+        if (!res.ok || cancelled) return
+        const raw = await res.json()
+        setFetchedPaper(isHai ? toPaper(raw) : raw)
+      } catch {
+        // 실패 시 상세가 안 열림 — 목록은 그대로 보임
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [paperParam, selectedPaper])
+
+  // 논문 상세 (회원 전용)
+  if (paperParam) {
+    if (!isLoggedIn()) {
+      return (
+        <LoginGateModal
+          onClose={() => setSearchParams({})}
+          onLogin={() => navigate('/login')}
+        />
+      )
+    }
+    if (selectedPaper) {
+      return (
+        <PaperDetail
+          paper={selectedPaper}
+          allPapers={papers}
+          onBack={() => setSearchParams({})}
+        />
+      )
+    }
+    // 아직 단일 논문 로딩 중
     return (
-      <PaperDetail
-        paper={selectedPaper}
-        allPapers={papers}
-        onBack={() => setSelectedPaper(null)}
-      />
+      <div style={{ padding: '80px', textAlign: 'center', color: '#9ca3af' }}>불러오는 중…</div>
     )
   }
 
@@ -314,17 +431,19 @@ export default function Papers() {
               title="최근 동향 논문"
               papers={papers}
               bookmarks={bookmarks}
-              onBookmark={toggleBookmark}
+              onBookmark={handleBookmark}
               onCardClick={handleCardClick}
             />
             <div style={{ height: '48px' }} />
+            {/* 휴먼AI 논문은 arxivId가 없어서 북마크 API를 쓸 수 없음 → 북마크 버튼 숨김 */}
             <PaperSection
               title="휴먼AI공학전공 논문"
               subtitle="최신 동향 반영을 위해 최근 3년 이내 논문을 중심으로 제공합니다."
-              papers={papers}
+              papers={haiPapers}
               bookmarks={bookmarks}
-              onBookmark={toggleBookmark}
+              onBookmark={handleBookmark}
               onCardClick={handleCardClick}
+              bookmarkable={false}
             />
             {/* hasNext가 true일 때만 더보기 버튼 표시 */}
             {hasNext && (
@@ -428,14 +547,15 @@ function LoginGateModal({ onClose, onLogin }: { onClose: () => void; onLogin: ()
 
 // 논문 섹션 컴포넌트 (제목 + 카드 슬라이더)
 function PaperSection({
-  title, subtitle, papers, bookmarks, onBookmark, onCardClick,
+  title, subtitle, papers, bookmarks, onBookmark, onCardClick, bookmarkable = true,
 }: {
   title: string
   subtitle?: string
   papers: Paper[]
-  bookmarks: Record<string, boolean>
-  onBookmark: (id: string) => void
+  bookmarks: Record<string, unknown>   // lib/bookmarks 스냅샷 — 키가 있으면 북마크됨
+  onBookmark: (paper: Paper) => void
   onCardClick: (paper: Paper) => void
+  bookmarkable?: boolean               // false면 북마크 버튼을 숨김(휴먼AI 논문)
 }) {
   const CARDS_PER_PAGE = 3 // 한 번에 보여줄 카드 수
   const [pageIndex, setPageIndex] = useState(0)
@@ -512,8 +632,9 @@ function PaperSection({
             <PaperCard
               key={paper.arxivId}
               paper={paper}
-              bookmarked={bookmarks[paper.arxivId] ?? false}
-              onBookmark={() => onBookmark(paper.arxivId)}
+              bookmarked={!!bookmarks[paper.arxivId]}
+              onBookmark={() => onBookmark(paper)}
+              bookmarkable={bookmarkable}
               onClick={() => onCardClick(paper)}
             />
           ))}
@@ -579,15 +700,16 @@ function PaperSection({
 
 // 개별 논문 카드 컴포넌트
 function PaperCard({
-  paper, bookmarked, onBookmark, onClick,
+  paper, bookmarked, onBookmark, onClick, bookmarkable = true,
 }: {
   paper: Paper
   bookmarked: boolean
   onBookmark: () => void
   onClick: () => void
+  bookmarkable?: boolean
 }) {
   const year = paper.publishedDate?.slice(0, 4) ?? '' // 출판연도 (앞 4자리)
-  const chips = paper.researchFields?.map(f => f.name) ?? [] // 분야 칩 전체
+  const chips = paper.researchFields ?? [] // 분야 칩 전체
 
   // 상세 페이지에서 지정한 읽음 상태 (localStorage 공유)
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
@@ -615,19 +737,21 @@ function PaperCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {/* 읽음 상태 뱃지 — 상세 페이지에서 설정한 값. 없으면 빈 자리 */}
         <ReadStatusTag status={readStatus} />
-        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지) */}
-        <button
-          onClick={e => { e.stopPropagation(); onBookmark() }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24"
-            fill={bookmarked ? '#3B6FE8' : 'none'}
-            stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
-            strokeWidth="2" strokeLinecap="round"
+        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지) — 휴먼AI 논문은 API 미지원이라 숨김 */}
+        {bookmarkable && (
+          <button
+            onClick={e => { e.stopPropagation(); onBookmark() }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
           >
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-          </svg>
-        </button>
+            <svg width="18" height="18" viewBox="0 0 24 24"
+              fill={bookmarked ? '#3B6FE8' : 'none'}
+              stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
+              strokeWidth="2" strokeLinecap="round"
+            >
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       <span style={{ fontSize: '11px', color: '#9ca3af' }}>{year}</span>
