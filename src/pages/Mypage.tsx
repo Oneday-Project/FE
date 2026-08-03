@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { clearToken, fetchMe, type Me } from '../lib/auth'
+import { clearToken, fetchMe, getToken, type Me } from '../lib/auth'
 import ReadStatusTag from '../components/ReadStatusTag'
 import {
   subscribeReadStatus,
@@ -23,7 +23,8 @@ export default function MyPage() {
   // const [password, setPassword] = useState('')  // 비밀번호 변경 기능 미사용
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [profileImage, setProfileImage] = useState<string | null>(null)
-  const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [modal, setModal] = useState<'logout' | 'withdraw' | null>(null)
+  const [withdrawing, setWithdrawing] = useState(false)
 
   // 마운트 시 실제 사용자 정보 조회 → 인사말·이름·닉네임·이메일 표시
   useEffect(() => {
@@ -35,8 +36,30 @@ export default function MyPage() {
   // 실제 로그아웃 처리: 저장된 토큰을 삭제하고 메인으로 이동
   const handleLogout = () => {
     clearToken()          // 토큰 삭제 + auth-change 이벤트 → 네브바가 '로그인/회원가입'으로 바뀜
-    setShowLogoutModal(false)
+    setModal(null)
     navigate('/')         // 로그아웃 후 화면은 미정 → 일단 메인으로
+  }
+
+  // 실제 회원 탈퇴: DELETE /users/me → 성공하면 토큰 삭제 후 로그아웃 상태의 메인으로
+  const handleWithdraw = async () => {
+    setWithdrawing(true)
+    try {
+      await fetch('/api/users/me', {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        },
+      })
+    } catch {
+      // 네트워크 실패해도 클라이언트 세션은 정리하고 내보냄
+    } finally {
+      clearToken()        // 토큰 삭제 → 네브바가 '로그인/회원가입'으로, 로그인 안 된 상태가 됨
+      setModal(null)
+      setWithdrawing(false)
+      navigate('/')       // 로그아웃(비로그인) 상태의 메인 페이지로
+    }
   }
 
   // 업로드 아이콘 클릭 → 숨겨진 input 열기 → 선택한 이미지 미리보기
@@ -105,7 +128,7 @@ export default function MyPage() {
             {['로그아웃', '회원탈퇴'].map(item => (
               <button
                 key={item}
-                onClick={() => { if (item === '로그아웃') setShowLogoutModal(true) }}
+                onClick={() => setModal(item === '로그아웃' ? 'logout' : 'withdraw')}
                 style={{
                   textAlign: 'left', background: 'none', border: 'none',
                   padding: '6px 0', fontSize: '14px', fontWeight: 400,
@@ -208,74 +231,129 @@ export default function MyPage() {
 
             {/* 읽고 있는 논문 / 다 읽은 논문 — 상세 페이지에서 지정한 상태로 채워짐 */}
             {(activeMenu === '읽고 있는 논문' || activeMenu === '다 읽은 논문') && (
-              <ReadStatusList status={activeMenu === '읽고 있는 논문' ? 'reading' : 'done'} />
+              <ReadStatusList status={activeMenu === '읽고 있는 논문' ? 'reading' : 'completed'} />
             )}
           </div>
         </div>
       </div>
 
-      {/* 로그아웃 확인 모달 — 화면 전체를 회색으로 덮고 가운데 팝업 */}
-      {showLogoutModal && (
-        <div
-          onClick={() => setShowLogoutModal(false)}
+      {/* 로그아웃 확인 모달 */}
+      {modal === 'logout' && (
+        <ConfirmModal
+          message="로그아웃 하시겠습니까?"
+          confirmLabel="로그아웃 하기"
+          confirmColor="#8b8fab"
+          onConfirm={handleLogout}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {/* 회원 탈퇴 확인 모달 — 탈퇴 / 취소 두 버튼 */}
+      {modal === 'withdraw' && (
+        <ConfirmModal
+          message="정말 탈퇴하시겠어요?"
+          confirmLabel={withdrawing ? '탈퇴 중…' : '회원 탈퇴'}
+          confirmColor="#EF4444"
+          cancelLabel="취소"
+          loading={withdrawing}
+          onConfirm={handleWithdraw}
+          onClose={() => { if (!withdrawing) setModal(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+/* 로그아웃·회원탈퇴 공용 확인 모달
+   cancelLabel 이 있으면 취소 버튼도 함께 노출(탈퇴용) */
+function ConfirmModal({
+  message, confirmLabel, confirmColor, cancelLabel, loading, onConfirm, onClose,
+}: {
+  message: string
+  confirmLabel: string
+  confirmColor: string
+  cancelLabel?: string
+  loading?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(71, 78, 94, 0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '90%', maxWidth: '380px',
+          background: '#fff', borderRadius: '16px',
+          padding: '32px 32px 28px',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="닫기"
           style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(71, 78, 94, 0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000,
+            position: 'absolute', top: 18, right: 18,
+            border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: '18px', color: '#6b7280', lineHeight: 1,
           }}
         >
-          <div
-            onClick={e => e.stopPropagation()}
+          ✕
+        </button>
+
+        {/* 타이틀 (로그인 화면과 동일 문구) */}
+        <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1a1a1a', margin: 0, lineHeight: 1.5 }}>
+          대학원 준비,
+        </h2>
+        <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1a1a1a', margin: '0 0 28px', lineHeight: 1.5 }}>
+          한 곳에서 끝내는 H-AI Grad
+        </h2>
+
+        <p style={{ fontSize: '15px', fontWeight: 600, color: '#374151', margin: '0 0 24px' }}>
+          {message}
+        </p>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
             style={{
-              position: 'relative',
-              width: '90%', maxWidth: '380px',
-              background: '#fff', borderRadius: '16px',
-              padding: '32px 32px 28px',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+              flex: 1, padding: '13px',
+              background: confirmColor, color: '#fff',
+              border: 'none', borderRadius: '10px',
+              fontSize: '14px', fontWeight: 600,
+              cursor: loading ? 'default' : 'pointer',
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            {/* 닫기 */}
+            {confirmLabel}
+          </button>
+
+          {cancelLabel && (
             <button
-              onClick={() => setShowLogoutModal(false)}
-              aria-label="닫기"
+              onClick={onClose}
+              disabled={loading}
               style={{
-                position: 'absolute', top: 18, right: 18,
-                border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: '18px', color: '#6b7280', lineHeight: 1,
-              }}
-            >
-              ✕
-            </button>
-
-            {/* 타이틀 (로그인 화면과 동일 문구) */}
-            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1a1a1a', margin: 0, lineHeight: 1.5 }}>
-              대학원 준비,
-            </h2>
-            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#1a1a1a', margin: '0 0 28px', lineHeight: 1.5 }}>
-              한 곳에서 끝내는 H-AI Grad
-            </h2>
-
-            {/* 안내 문구 */}
-            <p style={{ fontSize: '15px', fontWeight: 600, color: '#374151', margin: '0 0 24px' }}>
-              로그아웃 하시겠습니까?
-            </p>
-
-            {/* 실제 로그아웃 실행 */}
-            <button
-              onClick={handleLogout}
-              style={{
-                width: '100%', padding: '13px',
+                flex: 1, padding: '13px',
                 background: '#8b8fab', color: '#fff',
                 border: 'none', borderRadius: '10px',
-                fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                fontSize: '14px', fontWeight: 600,
+                cursor: loading ? 'default' : 'pointer',
               }}
             >
-              로그아웃 하기
+              {cancelLabel}
             </button>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -313,18 +391,22 @@ function BookmarkList() {
 }
 
 function BookmarkCard({ paper }: { paper: BookmarkedPaper }) {
+  const navigate = useNavigate()
   return (
-    <div style={{
-      background: '#fff', borderRadius: '14px', padding: '18px',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-      display: 'flex', flexDirection: 'column', gap: '8px',
-    }}>
+    <div
+      onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.arxivId)}`)}
+      style={{
+        background: '#fff', borderRadius: '14px', padding: '18px',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
+        display: 'flex', flexDirection: 'column', gap: '8px', cursor: 'pointer',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: '11px', color: '#9ca3af' }}>
           {paper.publishedDate?.slice(0, 4) ?? ''}
         </span>
         <button
-          onClick={() => void toggleBookmark(paper)}
+          onClick={e => { e.stopPropagation(); void toggleBookmark(paper) }}
           aria-label="북마크 해제"
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', lineHeight: 0 }}
         >
@@ -364,9 +446,10 @@ function BookmarkCard({ paper }: { paper: BookmarkedPaper }) {
 }
 
 /* 읽고 있는 / 다 읽은 논문 목록
-   논문 상세에서 '읽는 중 / 읽기 완료'를 누르면 localStorage에 쌓이고 여기에 반영됨.
-   (백엔드에 읽음 상태 API가 아직 없어서 로컬 저장 — lib/readStatus.ts 참고) */
+   논문 상세에서 '읽는 중 / 읽기 완료'를 누르면 서버에 반영되고 여기에 나타남.
+   (GET /users/me 의 readingPapers 기준 — lib/readStatus.ts 참고) */
 function ReadStatusList({ status }: { status: ReadStatus }) {
+  const navigate = useNavigate()
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
 
   const entries = Object.values(readMap)
@@ -396,10 +479,11 @@ function ReadStatusList({ status }: { status: ReadStatus }) {
       {entries.map(({ paper }) => (
         <div
           key={paper.arxivId}
+          onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.arxivId)}`)}
           style={{
             background: '#fff', borderRadius: '14px', padding: '18px',
             boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-            display: 'flex', flexDirection: 'column', gap: '8px',
+            display: 'flex', flexDirection: 'column', gap: '8px', cursor: 'pointer',
           }}
         >
           <ReadStatusTag status={status} />

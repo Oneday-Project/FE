@@ -269,7 +269,7 @@ function ContinueReadingSection() {
               {shown.map(({ paper, status }) => (
                 <div
                   key={paper.arxivId}
-                  onClick={() => navigate("/papers")}
+                  onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.arxivId)}`)}
                   style={{
                     background: "#fff", borderRadius: "14px", padding: "16px",
                     boxShadow: "0 2px 12px rgba(15,23,42,0.07)", border: "1px solid #f0f0f0",
