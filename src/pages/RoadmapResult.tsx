@@ -1,6 +1,7 @@
-import { useLocation } from "react-router-dom";
 import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
-import { calculateScores, type Answers } from "./roadmapScore";
+import { useNavigate } from "react-router-dom";
+import { fetchMe } from "../lib/auth";
+import { getMyRoadmap, getMajorCourses, type RoadmapAnalysis, type MajorCoursesResponse, type MajorCourse } from "../lib/roadmap";
 
 /* =========================================================
  *  대표색 (앞으로 색 바꿀 땐 여기 두 줄만 수정하면 됨)
@@ -8,13 +9,11 @@ import { calculateScores, type Answers } from "./roadmapScore";
 const BRAND = "#00178E";
 const BRAND_FILL = "rgba(0,23,142,0.22)";
 
-/* 점수 계산/타입은 ./roadmap 으로 분리 (fast refresh 경고 방지) */
-
-
 /* =========================================================
  *  방사형 그래프
  *  - 라벨을 각도 기반으로 자동 정렬(start/middle/end) → 잘림 없앰
  *  - requestAnimationFrame 으로 0→1 보간 → scale 꼼수 제거
+ *  - Main.tsx(메인페이지 My 로드맵 요약)도 이 컴포넌트를 그대로 가져다 씀
  * =======================================================*/
 export function RadarChart({
   values,
@@ -113,51 +112,26 @@ function SectionCard({ label, children, style }: { label: string; children: Reac
 
 const sectionDesc: CSSProperties = { fontSize: "14px", fontWeight: 600, color: "#334155", marginBottom: "22px" };
 
-/* =========================================================
- *  mock 데이터 (← 추후 백엔드 추천 API 응답으로 교체)
- * =======================================================*/
-/* course 테이블 한 행에 대응 (name / year_recommended / semester / description / hot)
-   hot = 추천(파랑) 여부. 백엔드에서 결정 예정, 지금은 임의로 표시 */
-type Course = {
-  name: string;
-  year: number; // year_recommended
-  semester: number; // 1 | 2
-  description: string;
-  hot?: boolean;
-};
-
-/* DB 기준 mock — 추후 백엔드 응답으로 교체 */
-const courses: Course[] = [
-  { name: "파이썬", year: 1, semester: 1, hot: true, description: "파이썬 문법과 자료구조·함수·파일처리를 배우며 AI 개발 기초를 다지는 입문 과목" },
-  { name: "C프로그래밍1", year: 1, semester: 1, description: "C언어 문법과 변수·조건문·반복문·배열·포인터를 배우는 프로그래밍 입문 과목" },
-  { name: "확률통계의 이해", year: 1, semester: 2, hot: true, description: "확률분포와 통계추론, 가설검정을 배우는 AI·데이터분석 필수 수학 과목" },
-  { name: "C프로그래밍2", year: 1, semester: 2, description: "포인터·구조체·동적메모리·파일처리 등 C언어 심화 문법을 배우는 중급 과목" },
-
-  { name: "자료구조", year: 2, semester: 1, hot: true, description: "리스트, 트리, 그래프, 해시 등 데이터를 효율적으로 저장·탐색하는 구조를 배우는 과목" },
-  { name: "선형대수학", year: 2, semester: 1, hot: true, description: "행렬, 벡터, 고유값, SVD 등 AI·데이터분석의 핵심 수학 도구를 배우는 기초 과목" },
-  { name: "객체지향프로그래밍", year: 2, semester: 1, hot: true, description: "자바 언어로 클래스, 상속, 다형성 등 객체지향 개념과 프로그램 작성 기초를 배우는 과목" },
-  { name: "인터랙션디자인", year: 2, semester: 1, description: "Unity로 UI, VR·AR, 인터랙티브 콘텐츠를 제작하며 사용자 상호작용 설계를 배우는 과목" },
-  { name: "컴퓨터로직설계", year: 2, semester: 1, description: "컴퓨터가 내부에서 정보를 처리하는 논리회로 구조와 CPU 기초 동작 원리를 배우는 과목" },
-  { name: "데이터베이스", year: 2, semester: 2, description: "SQL과 DB 설계·정규화·트랜잭션을 배우며 데이터를 효율적으로 관리하는 과목" },
-  { name: "인공지능개론", year: 2, semester: 2, hot: true, description: "기계학습의 핵심 알고리즘과 딥러닝 기초를 배우는 AI 입문 과목" },
-  { name: "빅데이터분석", year: 2, semester: 2, description: "Spark와 Python으로 대용량 데이터를 수집·분석하고 기계학습까지 다루는 실습 과목" },
-
-  { name: "UX분석", year: 3, semester: 1, description: "사용자 행동과 심리를 분석해 AI 서비스의 UX를 설계·평가하는 과목" },
-  { name: "딥러닝", year: 3, semester: 1, hot: true, description: "신경망·CNN·Transformer를 배우고 생성형 AI와 LLM까지 다루는 핵심 AI 과목" },
-  { name: "AI프로세서 설계", year: 3, semester: 1, description: "FPGA와 VHDL로 AI 연산용 프로세서와 하드웨어 가속기를 설계하는 과목" },
-  { name: "디지털신호처리", year: 3, semester: 1, description: "푸리에변환과 필터링으로 음성·생체·센서 데이터를 분석하는 신호처리 핵심 과목" },
-  { name: "디지털영상처리", year: 3, semester: 1, hot: true, description: "영상 개선·분할·특징추출·압축을 배우며 컴퓨터비전 기초를 다지는 과목" },
-  { name: "감성컴퓨팅", year: 3, semester: 1, description: "표정·음성·생체신호로 감정을 인식하고 감성 AI 시스템을 구현하는 융합 과목" },
-  { name: "영상패턴인식", year: 3, semester: 2, hot: true, description: "객체 검출·추적·3D비전·장면이해 등 영상 인식 기술을 배우는 컴퓨터비전 심화 과목" },
-  { name: "피지컬컴퓨팅", year: 3, semester: 2, description: "마이크로컨트롤러로 센서·입출력 장치를 제어해 인터랙티브 시스템을 만드는 과목" },
-  { name: "신호패턴인식", year: 3, semester: 2, description: "생체신호에서 특징을 추출해 분류·예측하는 AI 기반 신호분석 과목" },
-  { name: "강화학습", year: 3, semester: 2, hot: true, description: "보상을 최대화하도록 행동을 학습하는 AI 알고리즘과 심층강화학습을 배우는 과목" },
+/* 방사형 축 — 백엔드 radar 응답 키 순서 고정 (preparation/experience/paper/interest/academic) */
+const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
+  { key: "preparation", label: "이해도" },
+  { key: "experience", label: "경험" },
+  { key: "paper", label: "논문 루틴" },
+  { key: "interest", label: "관심 분야" },
+  { key: "academic", label: "학업" },
 ];
 
-const coursesAt = (year: number, semester: number) => courses.filter((c) => c.year === year && c.semester === semester);
+/* 성장 가이드 "현재 상태" 카드용 — 답변의 숫자 점수(0/2.5/5/7.5/10)를 설문 문구로 역변환
+   Roadmap.tsx 의 q5·q7 보기와 동일한 순서 */
+const Q5_LABELS = ["0회", "1~3회", "3~5회", "5~8회", "10회 이상"];
+const Q7_LABELS = ["없음", "1~3편", "4~10편", "11~20편", "20편 이상"];
+const labelOf = (labels: string[], score: unknown) => {
+  if (typeof score !== "number") return "-";
+  return labels[Math.round(score / 2.5)] ?? "-";
+};
 
-/* 과목 칩 — 호버 시 description 말풍선 (파랑/회색 상관없이 표시) */
-function CourseChip({ course }: { course: Course }) {
+/* 과목 칩 — 호버 시 description 말풍선 (추천/일반 상관없이 표시) */
+function CourseChip({ course }: { course: MajorCourse }) {
   const [hover, setHover] = useState(false);
   return (
     <div style={{ position: "relative", width: "fit-content" }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
@@ -191,14 +165,14 @@ function CourseChip({ course }: { course: Course }) {
           padding: "9px 14px",
           borderRadius: "6px 18px 6px 6px",
           fontSize: "12px",
-          fontWeight: course.hot ? 700 : 600,
+          fontWeight: course.recommended ? 700 : 600,
           whiteSpace: "nowrap",
           cursor: "default",
-          color: course.hot ? "#fff" : "#475569",
-          background: course.hot
+          color: course.recommended ? "#fff" : "#475569",
+          background: course.recommended
             ? "linear-gradient(145deg, #2a45ad 0%, #00178E 58%)"
             : "linear-gradient(145deg, #eef1f6 0%, #e2e8f0 60%)",
-          boxShadow: course.hot
+          boxShadow: course.recommended
             ? "0 4px 14px rgba(0,23,142,0.30), inset 0 1px 0 rgba(255,255,255,0.22)"
             : "0 2px 6px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
         }}
@@ -209,45 +183,89 @@ function CourseChip({ course }: { course: Course }) {
   );
 }
 
-type Paper = { year: number; title: string; desc: string };
-const paperRoadmap: Paper[] = [
-  { year: 2025, title: "Leveraging Recent Advances in Deep Learning for Audio-Visual Emotion Recognition", desc: "오디오(음성)와 비디오(얼굴) 특징을 딥러닝으로 추출해 결합하고, 시간 흐름(LSTM)까지 반영해 감정의 valence/arousal을 예측하는 멀티모달 감정인식 논문." },
-  { year: 2024, title: "Scaling Instruction-Tuned Language Models for Reasoning Tasks", desc: "지시 튜닝과 사고 사슬(chain-of-thought)을 결합해, 모델 크기 대비 추론 성능을 끌어올리는 방법을 다룬 논문." },
-  { year: 2025, title: "Bridging Vision and Language with Unified Contrastive Pretraining", desc: "이미지와 텍스트를 하나의 임베딩 공간에서 정렬하는 대조 학습으로, 제로샷 분류·검색 성능을 높인 멀티모달 사전학습 논문." },
-];
+const pageBg = { width: "100%", minHeight: "100vh", background: "linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)" };
 
 /* =========================================================
- *  결과 페이지
+ *  결과 페이지 — GET /roadmap/me + GET /roadmap/major-courses 로 조회
  * =======================================================*/
 export default function RoadmapResult() {
-  const location = useLocation();
-  const answers: Answers = location.state?.answers || location.state || {};
+  const navigate = useNavigate();
 
-  const scores = calculateScores(answers);
-  const tags = Array.isArray(answers.q2) ? answers.q2 : [];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [analysis, setAnalysis] = useState<RoadmapAnalysis | null>(null);
+  const [answers, setAnswers] = useState<Record<string, unknown> | null>(null);
+  const [majorCourses, setMajorCourses] = useState<MajorCoursesResponse | null>(null);
 
-  /* 방사형 축 (값 + 라벨). ⚠ '성적' 축은 실제로 Q11 수학 + Q12 영어 합산값.
-     라벨 의미를 '학업'으로 바꾸거나, 학점을 따로 입력받는 방안 검토 권장 */
-  const axes = [
-    { label: "이해도", v: scores.prep },
-    { label: "경험", v: scores.exp },
-    { label: "논문 루틴", v: scores.paper },
-    { label: "포트폴리오", v: scores.portfolio },
-    { label: "성적", v: scores.study },
-  ];
-  const strong = axes.reduce((a, b) => (b.v > a.v ? b : a));
-  const weak = axes.reduce((a, b) => (b.v < a.v ? b : a));
+  useEffect(() => {
+    let cancelled = false;
 
-  /* 성장 가이드용 현재 상태 (설문 답변 그대로 사용) */
-  const paperFreq = (answers.q7 as string) || "-";
-  const extracurricular = (answers.q5 as string) || "-";
+    (async () => {
+      try {
+        const [me, mine, majors] = await Promise.all([
+          fetchMe(),
+          getMyRoadmap(),
+          getMajorCourses().catch(() => null), // 전공 로드맵은 부가 정보 — 실패해도 나머지는 보여줌
+        ]);
+        if (cancelled) return;
+
+        if (!mine.hasRoadmap || !mine.latest) {
+          setError("아직 생성된 로드맵이 없어요.");
+          return;
+        }
+
+        setNickname(me?.nickname ?? "");
+        setAnalysis(mine.latest.result);
+        setAnswers(mine.latest.answers);
+        setMajorCourses(majors);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "로드맵을 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ ...pageBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ fontSize: "14px", color: "#64748b" }}>불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (error || !analysis) {
+    return (
+      <div style={{ ...pageBg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+        <p style={{ fontSize: "14px", color: "#64748b" }}>{error ?? "로드맵을 불러오지 못했습니다."}</p>
+        <button
+          onClick={() => navigate("/roadmap")}
+          style={{ padding: "12px 24px", background: BRAND, color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
+        >
+          로드맵 만들러 가기
+        </button>
+      </div>
+    );
+  }
+
+  const tags = analysis.overview.interestFields ?? [];
+  const paperFreq = labelOf(Q7_LABELS, answers?.q7);
+  const extracurricular = labelOf(Q5_LABELS, answers?.q5);
+  const commentLines = analysis.overview.comment.split("\n");
 
   return (
-    <div style={{ width: "100%", minHeight: "100vh", background: "linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)" }}>
+    <div style={pageBg}>
       <div style={{ maxWidth: "980px", margin: "0 auto", padding: "56px 48px 90px" }}>
         {/* 헤더 */}
         <div style={{ marginBottom: "56px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", margin: 0 }}>wnnye님의 로드맵 결과입니다.</h1>
+          <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+            {nickname ? `${nickname}님의 로드맵 결과입니다.` : "로드맵 결과입니다."}
+          </h1>
           <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
         </div>
 
@@ -256,13 +274,13 @@ export default function RoadmapResult() {
           <SectionCard label="종합 코멘트">
             <div style={{ display: "flex", alignItems: "center", gap: "28px", flexWrap: "wrap" }}>
               <div style={{ flex: "0 0 280px", display: "flex", justifyContent: "center" }}>
-                <RadarChart values={axes.map((a) => a.v)} labels={axes.map((a) => a.label)} max={20} />
+                <RadarChart values={RADAR_AXES.map((a) => analysis.radar[a.key])} labels={RADAR_AXES.map((a) => a.label)} max={10} />
               </div>
               <div style={{ width: "1px", alignSelf: "stretch", background: "#e5e7eb" }} />
               <div style={{ flex: 1, minWidth: "260px" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "16px" }}>
                   <span style={{ fontSize: "15px", color: "#475569" }}>종합 점수</span>
-                  <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{scores.total}점</b>
+                  <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{analysis.overview.totalScore}점</b>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "18px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "13px", color: "#64748b", marginRight: "2px" }}>관심 분야</span>
@@ -271,9 +289,12 @@ export default function RoadmapResult() {
                   ))}
                 </div>
                 <p style={{ fontSize: "13.5px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                  현재 준비도는 <b style={{ color: BRAND }}>{scores.total}점</b>이에요.<br />
-                  강점은 <b>{strong.label}</b> 영역이고,<br />
-                  다음 단계로는 <b>{weak.label}</b>을(를) 먼저 보완하면 좋아요.
+                  {commentLines.map((line, i) => (
+                    <span key={i}>
+                      {line}
+                      {i < commentLines.length - 1 && <br />}
+                    </span>
+                  ))}
                 </p>
               </div>
             </div>
@@ -282,49 +303,53 @@ export default function RoadmapResult() {
           {/* ── 전공 로드맵 ── */}
           <SectionCard label="전공 로드맵">
             <p style={sectionDesc}>관심 분야에 따라 추천된 전공 과목 내역입니다.</p>
-            <div style={{ display: "flex", gap: "20px" }}>
-              {[1, 2, 3].map((year) => (
-                <div key={year} style={{ flex: 1 }}>
-                  <div style={{ border: "1px solid #cbd5e1", borderRadius: "8px", textAlign: "center", padding: "8px 0", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "10px" }}>{year}학년</div>
-                  <div style={{ display: "flex" }}>
-                    <div style={{ flex: 1, textAlign: "center", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>1학기</div>
-                    <div style={{ flex: 1, textAlign: "center", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>2학기</div>
-                  </div>
-                  <div style={{ height: "1px", background: "#e5e7eb", margin: "8px 0 14px" }} />
-                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-                    {[1, 2].map((sem) => (
-                      <div key={sem} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
-                        {coursesAt(year, sem).map((c) => (
-                          <CourseChip key={c.name} course={c} />
+            {majorCourses && majorCourses.years.length > 0 ? (
+              <>
+                <div style={{ display: "flex", gap: "20px" }}>
+                  {majorCourses.years.map((yearGroup) => (
+                    <div key={yearGroup.year} style={{ flex: 1 }}>
+                      <div style={{ border: "1px solid #cbd5e1", borderRadius: "8px", textAlign: "center", padding: "8px 0", fontSize: "13px", fontWeight: 700, color: "#334155", marginBottom: "10px" }}>{yearGroup.year}학년</div>
+                      <div style={{ display: "flex" }}>
+                        {yearGroup.semesters.map((s) => (
+                          <div key={s.semester} style={{ flex: 1, textAlign: "center", fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>{s.semester}학기</div>
                         ))}
                       </div>
-                    ))}
-                  </div>
+                      <div style={{ height: "1px", background: "#e5e7eb", margin: "8px 0 14px" }} />
+                      <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                        {yearGroup.semesters.map((s) => (
+                          <div key={s.semester} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
+                            {s.courses.map((c) => (
+                              <CourseChip key={c.courseId} course={c} />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "18px", fontSize: "12px", color: "#64748b" }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: BRAND, display: "inline-block" }} /> 추천 과목
-              </span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: "#e2e8f0", display: "inline-block" }} /> 일반 과목
-              </span>
-              <span style={{ color: "#94a3b8" }}>· 과목에 마우스를 올리면 설명이 표시됩니다</span>
-            </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "16px", marginTop: "18px", fontSize: "12px", color: "#64748b" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: BRAND, display: "inline-block" }} /> 추천 과목
+                  </span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ width: "14px", height: "14px", borderRadius: "4px", background: "#e2e8f0", display: "inline-block" }} /> 일반 과목
+                  </span>
+                  <span style={{ color: "#94a3b8" }}>· 과목에 마우스를 올리면 설명이 표시됩니다</span>
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", padding: "24px 0" }}>전공 로드맵을 불러오지 못했어요.</p>
+            )}
           </SectionCard>
 
-          {/* ── 논문 로드맵 ── */}
+          {/* ── 논문 로드맵 (추천 데이터는 백엔드 준비 중 — 관심 분야 태그만 우선 표시) ── */}
           <SectionCard label="논문 로드맵">
             <p style={sectionDesc}>선택한 관심 분야에 대한 핵심 논문 추천 결과입니다.</p>
             <div style={{ display: "flex", gap: "24px" }}>
-              {/* 관심 분야는 최대 3개 → 칸은 항상 3개, 선택한 태그 수만큼만 채움 */}
               {[0, 1, 2].map((i) => {
                 const tag = tags[i];
-                const p = paperRoadmap[i];
 
-                // 선택 안 된 칸 → 빈 placeholder (연한 왼쪽 선 + 흐린 로고)
-                if (!tag || !p) {
+                if (!tag) {
                   return (
                     <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: "3px solid #c7d2fe", display: "flex", flexDirection: "column", minHeight: "200px" }}>
                       <span style={{ alignSelf: "flex-start", padding: "4px 16px", borderRadius: "999px", fontSize: "13px", border: "1.5px dashed #cbd5e1", color: "#cbd5e1", fontWeight: 700, marginBottom: "12px" }}>-</span>
@@ -335,21 +360,21 @@ export default function RoadmapResult() {
                   );
                 }
 
-                // 선택된 칸 → 논문 카드
                 return (
-                  <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: `3px solid ${BRAND}` }}>
+                  <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: `3px solid ${BRAND}`, display: "flex", flexDirection: "column", minHeight: "200px" }}>
                     <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 700, marginBottom: "12px" }}>{tag}</span>
-                    <p style={{ fontSize: "11px", color: "#94a3b8", margin: "0 0 4px" }}>{p.year}</p>
-                    <p style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.35, color: "#1e293b", margin: "0 0 10px" }}>{p.title}</p>
-                    <div style={{ height: "1px", background: "#e5e7eb", margin: "0 0 10px" }} />
-                    <p style={{ fontSize: "11.5px", color: "#64748b", lineHeight: 1.55, margin: 0 }}>{p.desc}</p>
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+                      <p style={{ fontSize: "12.5px", color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>
+                        추천 논문을 준비하고 있어요.<br />곧 만나보실 수 있어요!
+                      </p>
+                    </div>
                   </div>
                 );
               })}
             </div>
           </SectionCard>
 
-          {/* ── 성장 가이드 ── */}
+          {/* ── 성장 가이드 (Tip 은 백엔드 준비 중 — 현재 상태 카드만 실데이터) ── */}
           <SectionCard label="성장 가이드">
             <div style={{ display: "flex", alignItems: "stretch", gap: "18px", flexWrap: "wrap" }}>
               {/* 현재 상태 카드 2개 */}
@@ -371,15 +396,11 @@ export default function RoadmapResult() {
                 </svg>
               </div>
               {/* Tip 박스 */}
-              <div style={{ flex: 1, minWidth: "280px", background: "#f5f8ff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "20px 22px" }}>
-                <p style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>
+              <div style={{ flex: 1, minWidth: "280px", background: "#f5f8ff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "20px 22px", display: "flex", alignItems: "center" }}>
+                <p style={{ margin: 0, fontSize: "13px", color: "#475569", lineHeight: 1.7 }}>
                   <span style={{ color: "#ef4444", border: "1.5px solid #ef4444", borderRadius: "6px", padding: "1px 7px", fontSize: "12px", marginRight: "8px" }}>Tip!</span>
-                  앞으로 이렇게 해보는 건 어떨까요?
+                  맞춤 성장 가이드를 준비하고 있어요. 곧 만나보실 수 있어요!
                 </p>
-                <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "13px", color: "#475569", lineHeight: 1.7 }}>
-                  <li>논문 읽기 횟수를 유지하되, <b style={{ color: BRAND }}>이해하고 정리할 수 있는 수준</b>으로 학습해보세요.</li>
-                  <li>관심 있는 분야에 초점을 맞춰 <b style={{ color: BRAND }}>다양한 형태의 대외 활동</b>을 꾸준히 진행해보세요.</li>
-                </ol>
               </div>
             </div>
           </SectionCard>

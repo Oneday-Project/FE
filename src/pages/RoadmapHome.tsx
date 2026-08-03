@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getToken } from '../lib/auth'
+import { getMyRoadmap } from '../lib/roadmap'
 
 const BRAND = '#00178E'
 
@@ -7,8 +10,19 @@ const BRAND = '#00178E'
 export default function RoadmapHome() {
   const navigate = useNavigate()
 
-  // 저장된 로드맵이 있어야 "수정하러 가기" 활성화 (백엔드 연동 시 API 상태로 교체)
-  const hasSaved = !!localStorage.getItem('roadmapAnswers')
+  // 저장된 로드맵이 있어야 "수정하러 가기" 활성화 — GET /roadmap/me 로 확인
+  const [hasSaved, setHasSaved] = useState(false)
+
+  useEffect(() => {
+    if (!getToken()) return
+    let cancelled = false
+
+    getMyRoadmap()
+      .then((res) => { if (!cancelled) setHasSaved(res.hasRoadmap) })
+      .catch(() => { if (!cancelled) setHasSaved(false) })
+
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <div style={{ position: 'relative', width: '100%', padding: '100px 80px' }}>
