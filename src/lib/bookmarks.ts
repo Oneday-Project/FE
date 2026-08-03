@@ -1,7 +1,8 @@
 // 논문 북마크 관리 — 서버와 연동됨
 //
-//   POST /papers/bookmark/{arxivId}  → 표시/해제 토글 (body 없음, 토큰 필요)
-//   GET  /users/me                   → bookmarkPapers[] 로 북마크 목록 조회
+//   GET  /papers/library?type=bookmark      → 북마크 목록 조회
+//   POST /papers/bookmark/{arxivId}         → 일반 논문 토글
+//   POST /papers/hai-papers/{id}/bookmark   → 휴먼AI 논문 토글
 //
 // 논문 목록 · 메인 · 마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
@@ -36,23 +37,26 @@ function authHeaders(): HeadersInit {
   }
 }
 
-// /users/me 응답의 bookmarkPapers[].paper 를 화면에서 쓸 형태로 변환
-type RawPaper = {
-  arxivId?: string
+/* GET /papers/library?type=bookmark 항목
+   { type: "paper"|"hai", id, title, publishedDate, tags[], isBookmark, readingStatus } */
+type LibraryItem = {
+  type?: string
+  id?: string | number
   title?: string
   publishedDate?: string
-  abstract?: string
-  researchFields?: { name?: string }[]
+  tags?: string[]
 }
 
-function toBookmarkedPaper(raw: RawPaper): BookmarkedPaper | null {
-  if (!raw?.arxivId) return null
+function toBookmarkedPaper(item: LibraryItem): BookmarkedPaper | null {
+  if (item.id == null) return null
+  // 일반 논문은 arxivId, 휴먼AI는 "hai-{id}" 로 키 통일
+  const arxivId = item.type === 'hai' ? `hai-${item.id}` : String(item.id)
   return {
-    arxivId: raw.arxivId,
-    title: raw.title ?? '',
-    publishedDate: raw.publishedDate,
-    abstract: raw.abstract,
-    fields: raw.researchFields?.map(f => f.name).filter((n): n is string => !!n) ?? [],
+    arxivId,
+    title: item.title ?? '',
+    publishedDate: item.publishedDate,
+    abstract: undefined, // library 응답엔 초록 없음
+    fields: item.tags ?? [],
   }
 }
 
@@ -62,15 +66,17 @@ function ensureLoaded(): void {
 
   loading = (async () => {
     try {
-      const res = await fetch('/api/users/me', { headers: authHeaders() })
-      if (!res.ok) return
-
-      const me = await res.json()
       const next: BookmarkMap = {}
-
-      for (const item of me?.bookmarkPapers ?? []) {
-        const paper = toBookmarkedPaper(item?.paper)
-        if (paper) next[paper.arxivId] = paper
+      let page = 1
+      for (; page <= 20; page++) {
+        const res = await fetch(`/api/papers/library?type=bookmark&take=100&page=${page}`, { headers: authHeaders() })
+        if (!res.ok) break
+        const json = await res.json()
+        for (const item of (json.data ?? []) as LibraryItem[]) {
+          const paper = toBookmarkedPaper(item)
+          if (paper) next[paper.arxivId] = paper
+        }
+        if (page >= (json.totalPages ?? 1)) break
       }
 
       loaded = true
@@ -100,11 +106,16 @@ export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
 
   emit(next)
 
+  // 휴먼AI 논문은 별도 엔드포인트
+  //   일반   → POST /papers/bookmark/{arxivId}
+  //   휴먼AI → POST /papers/hai-papers/{id}/bookmark
+  const isHai = paper.arxivId.startsWith('hai-')
+  const url = isHai
+    ? `/api/papers/hai-papers/${encodeURIComponent(paper.arxivId.slice(4))}/bookmark`
+    : `/api/papers/bookmark/${encodeURIComponent(paper.arxivId)}`
+
   try {
-    const res = await fetch(`/api/papers/bookmark/${encodeURIComponent(paper.arxivId)}`, {
-      method: 'POST',
-      headers: authHeaders(),
-    })
+    const res = await fetch(url, { method: 'POST', headers: authHeaders() })
     if (!res.ok) throw new Error(String(res.status))
   } catch {
     emit(before) // 서버 반영 실패 → 원래대로
