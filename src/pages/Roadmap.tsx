@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { createRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
 
 /* =========================================================
  *  대표색 (색 바꿀 땐 여기 두 줄만 수정)
@@ -31,7 +32,7 @@ const questions: Question[] = [
     id: "q2",
     type: "multi",
     title: "Q2. 관심분야를 선택해주세요 (최대 3개까지 선택 가능)",
-    options: ["SML", "ML", "CV", "NLP", "Robotics", "Retrieval AI", "HCI", "Multimodal", "Code AI"],
+    options: ["SML", "ML", "CV", "NLP", "Robotics", "Retrieval AI", "SAP", "HCI", "Multimodal", "Code AI"],
   },
 
   { type: "section", label: "전공 및 연구 준비도" },
@@ -66,13 +67,13 @@ const questions: Question[] = [
 
   { type: "section", label: "대외 활동 (복수 선택)" },
 
-  { id: "q9", type: "multi", title: "Q9. 대학원 진학을 위해 현재 준비된 항목을 모두 선택해 주세요.", options: ["아직 아무 것도 없어요", "GitHub 포트폴리오", "CV(이력서)", "연구·학습 기록용 Notion", "공인 영어 성적(TOEIC, TOEFL, OPIC 등)"] },
+  { id: "q9", type: "multi", title: "Q9. 대학원 진학을 위해 현재 준비된 항목을 모두 선택해 주세요.", options: ["아직 아무 것도 없어요", "GitHub 포트폴리오", "CV(이력서)", "연구·학습 기록용 Notion", "공인 영어 성적 (TOEIC, TOEFL, OPIC 등)"] },
   { id: "q10", type: "multi", title: "Q10. 기술 또는 연구 관련 발표 경험이 있나요?", options: ["없음", "수업 프로젝트 발표", "동아리/스터디 발표", "교내 학술 발표", "학회 발표"] },
 
   { type: "section", label: "학업 기반 역량" },
 
   { id: "q11", type: "single", title: "Q11. 수학/이론 이해 수준 정도가 어떻게 되나요?", options: ["거의 이해하지 못해요.", "수업을 수강한 정도예요.", "개념을 완벽히 이해했어요.", "개념을 응용할 수 있어요.", "증명 및 이론 설명이 자유롭게 가능해요."] },
-  { id: "q12", type: "single", title: "Q12. 영어 논문 독해 능력은 어느 정도인가요?", options: ["읽을 수 있는 단어가 없어요.", "뜨문뜨문 아는 단어가 나와요.", "어느 정도 독해 가능해요.", "혼자서 문맥 이해가 가능해요.", "번역 없이도 전부 해석 가능해요."] },
+  { id: "q12", type: "single", title: "Q12. 현재 누적 평점(GPA)은 어느 구간에 해당하나요?", options: ["2.5 미만", "2.5 이상 ~ 3.0 미만", "3.0 이상 ~ 3.5 미만", "3.5 이상 ~ 4.0 미만", "4.0 이상"] },
 ];
 
 /* =========================================================
@@ -192,6 +193,7 @@ function OptionsField({
 export default function Roadmap() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isEditMode = !!location.state?.edit;
 
   // "수정하러 가기"로 들어오면(location.state.edit) 저장된 답변을 불러와 미리 채움
   const [answers, setAnswers] = useState<Answers>(() => {
@@ -205,9 +207,72 @@ export default function Roadmap() {
     }
     return {};
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const questionItems = questions.filter((q): q is Extract<Question, { id: string }> => "id" in q);
   const lastQuestionId = questionItems[questionItems.length - 1].id;
+
+  // 프론트 설문 답변(문자열 라벨) → 백엔드 AnalyzeRoadmapDto(숫자/코드) 변환
+  // q3~q8·q11 은 옵션이 모두 5개(0/2.5/5/7.5/10 순)라 인덱스*2.5 로 바로 환산됨
+  const buildPayload = (): RoadmapPayload => {
+    const q1 = (answers.q1 as string) ?? "";
+    const m = q1.match(/(\d)학년\s*(\d)학기/);
+
+    const scoreOf = (qid: string) => {
+      const q = questionItems.find((item) => item.id === qid);
+      const idx = q ? q.options.indexOf(answers[qid] as string) : -1;
+      return idx >= 0 ? idx * 2.5 : 0;
+    };
+
+    return {
+      year: m ? Number(m[1]) : 1,
+      semester: m ? Number(m[2]) : 1,
+      interestFields: (answers.q2 as string[]) ?? [],
+      q3: scoreOf("q3"),
+      q4: scoreOf("q4"),
+      q5: scoreOf("q5"),
+      q6: scoreOf("q6"),
+      q7: scoreOf("q7"),
+      q8: scoreOf("q8"),
+      q9: (answers.q9 as string[]) ?? [],
+      q10: (answers.q10 as string[]) ?? [],
+      q11: scoreOf("q11"),
+      gpaBand: (answers.q12 as string) ?? "",
+    };
+  };
+
+  const handleSubmit = async () => {
+    if (!isAllAnswered || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const payload = buildPayload();
+
+    try {
+      if (isEditMode) {
+        await updateRoadmap(payload);
+      } else {
+        try {
+          await createRoadmap(payload);
+        } catch (e) {
+          // 이미 로드맵이 있으면(409) 수정으로 대체
+          if ((e as { status?: number })?.status === 409) {
+            await updateRoadmap(payload);
+          } else {
+            throw e;
+          }
+        }
+      }
+
+      localStorage.setItem("roadmapAnswers", JSON.stringify(answers));
+      navigate("/roadmap-result", { state: answers });
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "로드맵 저장에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const isAllAnswered = questions.every((q) => {
     if (!("id" in q)) return true;
@@ -324,27 +389,26 @@ export default function Roadmap() {
         {/* 제출 버튼 */}
         <div style={{ marginTop: "48px", textAlign: "center" }}>
           <button
-            disabled={!isAllAnswered}
-            onClick={() => {
-              if (!isAllAnswered) return;
-              // 임시 저장 (백엔드 연동 시 이 줄을 저장 API 호출로 교체)
-              localStorage.setItem("roadmapAnswers", JSON.stringify(answers));
-              navigate("/roadmap-result", { state: answers });
-            }}
+            disabled={!isAllAnswered || submitting}
+            onClick={handleSubmit}
             style={{
               padding: "14px 32px",
               borderRadius: "12px",
               border: "none",
               fontSize: "16px",
               fontWeight: 700,
-              cursor: isAllAnswered ? "pointer" : "not-allowed",
+              cursor: isAllAnswered && !submitting ? "pointer" : "not-allowed",
               background: isAllAnswered ? BRAND : "#d1d5db",
               color: isAllAnswered ? "#fff" : "#6b7280",
               transition: "0.2s",
+              opacity: submitting ? 0.7 : 1,
             }}
           >
-            로드맵 생성하러 가기
+            {submitting ? "저장하는 중..." : "로드맵 생성하러 가기"}
           </button>
+          {submitError && (
+            <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{submitError}</p>
+          )}
         </div>
       </div>
     </div>
