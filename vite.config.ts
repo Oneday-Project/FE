@@ -1,11 +1,13 @@
 import { defineConfig, loadEnv } from 'vite'
+import type { Plugin, ViteDevServer } from 'vite'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import react from '@vitejs/plugin-react'
 
-function anthropicProxyPlugin() {
+function anthropicProxyPlugin(): Plugin {
   return {
     name: 'anthropic-proxy',
-    configureServer(server) {
-      server.middlewares.use('/claude', async (req, res, next) => {
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use('/claude', async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (req.method !== 'POST') {
           next()
           return
@@ -53,7 +55,7 @@ function anthropicProxyPlugin() {
             }),
           })
 
-          const data = await response.json().catch(() => ({}))
+          const data: any = await response.json().catch(() => ({}))
 
           if (!response.ok) {
             res.statusCode = response.status
