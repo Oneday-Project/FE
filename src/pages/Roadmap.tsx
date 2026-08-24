@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { createRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
+import { createRoadmap, getMyRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
 
 /* =========================================================
  *  대표색 (색 바꿀 땐 여기 두 줄만 수정)
@@ -75,6 +75,34 @@ const questions: Question[] = [
   { id: "q11", type: "single", title: "Q11. 수학/이론 이해 수준 정도가 어떻게 되나요?", options: ["거의 이해하지 못해요.", "수업을 수강한 정도예요.", "개념을 완벽히 이해했어요.", "개념을 응용할 수 있어요.", "증명 및 이론 설명이 자유롭게 가능해요."] },
   { id: "q12", type: "single", title: "Q12. 현재 누적 평점(GPA)은 어느 구간에 해당하나요?", options: ["2.5 미만", "2.5 이상 ~ 3.0 미만", "3.0 이상 ~ 3.5 미만", "3.5 이상 ~ 4.0 미만", "4.0 이상"] },
 ];
+
+const questionItems = questions.filter((q): q is Extract<Question, { id: string }> => "id" in q);
+
+// 백엔드 숫자 점수(0/2.5/5/7.5/10) → 화면에 표시할 문항 텍스트로 역변환
+// buildPayload() 의 scoreOf() 와 반대 방향 (q12 는 gpaBand 로 저장되므로 호출부에서 qid만 다르게 넘김)
+const optionOfScore = (qid: string, score: number): string => {
+  const q = questionItems.find((item) => item.id === qid);
+  const idx = Math.round(score / 2.5);
+  return q?.options[idx] ?? "";
+};
+
+// GET /roadmap/me 의 latest.answers(RoadmapPayload) → 설문 화면 Answers 형태로 역변환 ("수정하러 가기" 초기값 채우기용)
+function payloadToAnswers(payload: RoadmapPayload): Answers {
+  return {
+    q1: `${payload.year}학년 ${payload.semester}학기`,
+    q2: payload.interestFields,
+    q3: optionOfScore("q3", payload.q3),
+    q4: optionOfScore("q4", payload.q4),
+    q5: optionOfScore("q5", payload.q5),
+    q6: optionOfScore("q6", payload.q6),
+    q7: optionOfScore("q7", payload.q7),
+    q8: optionOfScore("q8", payload.q8),
+    q9: payload.q9,
+    q10: payload.q10,
+    q11: optionOfScore("q11", payload.q11),
+    q12: optionOfScore("q12", payload.gpaBand),
+  };
+}
 
 /* =========================================================
  *  선택지 컴포넌트 (커스텀 스타일)
@@ -195,22 +223,40 @@ export default function Roadmap() {
   const location = useLocation();
   const isEditMode = !!location.state?.edit;
 
-  // "수정하러 가기"로 들어오면(location.state.edit) 저장된 답변을 불러와 미리 채움
-  const [answers, setAnswers] = useState<Answers>(() => {
-    if (location.state?.edit) {
-      try {
-        const saved = localStorage.getItem("roadmapAnswers");
-        if (saved) return JSON.parse(saved) as Answers;
-      } catch {
-        /* 파싱 실패 시 빈 값으로 시작 */
-      }
-    }
-    return {};
-  });
+  const [answers, setAnswers] = useState<Answers>({});
+  // "수정하러 가기"로 들어오면(isEditMode) GET /roadmap/me 의 latest.answers 로 초기값을 채움
+  const [loadingSaved, setLoadingSaved] = useState(isEditMode);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const questionItems = questions.filter((q): q is Extract<Question, { id: string }> => "id" in q);
+  useEffect(() => {
+    if (!isEditMode) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const mine = await getMyRoadmap();
+        if (cancelled) return;
+        if (mine.hasRoadmap && mine.latest) {
+          setAnswers(payloadToAnswers(mine.latest.answers));
+        } else {
+          setLoadError("불러올 로드맵이 없어요.");
+        }
+      } catch (e) {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "이전 답변을 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setLoadingSaved(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // 최초 진입 시 한 번만 조회
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const lastQuestionId = questionItems[questionItems.length - 1].id;
 
   // 프론트 설문 답변(문자열 라벨) → 백엔드 AnalyzeRoadmapDto(숫자/코드) 변환
@@ -238,7 +284,7 @@ export default function Roadmap() {
       q9: (answers.q9 as string[]) ?? [],
       q10: (answers.q10 as string[]) ?? [],
       q11: scoreOf("q11"),
-      gpaBand: (answers.q12 as string) ?? "",
+      gpaBand: scoreOf("q12"),
     };
   };
 
@@ -318,12 +364,23 @@ export default function Roadmap() {
     });
   };
 
+  const pageBg = { width: "100%", minHeight: "100vh", background: "linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)" };
+
+  if (loadingSaved) {
+    return (
+      <div style={{ ...pageBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ fontSize: "14px", color: "#64748b" }}>이전 답변을 불러오는 중...</p>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ width: "100%", minHeight: "100vh", background: "linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)" }}>
+    <div style={pageBg}>
       <div style={{ maxWidth: "960px", margin: "0 auto", padding: "56px 48px 80px" }}>
         <div style={{ marginBottom: "56px" }}>
           <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", margin: 0 }}>내 로드맵, 지금 생성하기</h1>
           <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
+          {loadError && <p style={{ fontSize: "13px", color: "#dc2626", marginTop: "8px" }}>{loadError}</p>}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
