@@ -22,7 +22,7 @@ export type RoadmapPayload = {
   q9: string[]
   q10: string[]
   q11: number
-  gpaBand: string
+  gpaBand: number
 }
 
 export type RoadmapRadar = {

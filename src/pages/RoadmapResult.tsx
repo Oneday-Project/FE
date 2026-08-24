@@ -15,14 +15,20 @@ const BRAND_FILL = "rgba(0,23,142,0.22)";
  *  - requestAnimationFrame 으로 0→1 보간 → scale 꼼수 제거
  *  - Main.tsx(메인페이지 My 로드맵 요약)도 이 컴포넌트를 그대로 가져다 씀
  * =======================================================*/
+const COMPARE_COLOR = "#94a3b8";
+const COMPARE_FILL = "rgba(148,163,184,0.12)";
+
 export function RadarChart({
   values,
   labels,
   max = 20,
+  compareValues,
 }: {
   values: number[];
   labels: string[];
   max?: number;
+  /* 최초 로드맵처럼 배경에 회색으로 비교 표시할 데이터셋 (선택) */
+  compareValues?: number[];
 }) {
   const size = 280;
   const center = size / 2;
@@ -41,9 +47,9 @@ export function RadarChart({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // values 가 매 렌더 새 배열이어도 재실행 안 되도록 문자열 키로 비교
+    // values/compareValues 가 매 렌더 새 배열이어도 재실행 안 되도록 문자열 키로 비교
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values.join(",")]);
+  }, [values.join(","), compareValues?.join(",")]);
 
   const angleFor = (i: number) => (Math.PI * 2 * i) / values.length - Math.PI / 2;
   const point = (i: number, r: number): [number, number] => [
@@ -54,9 +60,10 @@ export function RadarChart({
     values.map((_, i) => point(i, radius * frac).join(",")).join(" ");
 
   const clamp = (v: number) => Math.max(0, Math.min(v, max));
-  const dataPoints = values
-    .map((v, i) => point(i, (clamp(v) / max) * radius * t).join(","))
-    .join(" ");
+  const dataPointsFor = (vals: number[]) =>
+    vals.map((v, i) => point(i, (clamp(v) / max) * radius * t).join(",")).join(" ");
+  const dataPoints = dataPointsFor(values);
+  const compareDataPoints = compareValues ? dataPointsFor(compareValues) : null;
 
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="역량 방사형 그래프">
@@ -76,8 +83,18 @@ export function RadarChart({
         const [x, y] = point(i, radius);
         return <line key={i} x1={center} y1={center} x2={x} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
       })}
-      {/* 데이터 영역 */}
+      {/* 비교 데이터 영역 (최초 로드맵 — 회색, 뒤에 깔림) */}
+      {compareDataPoints && (
+        <polygon points={compareDataPoints} fill={COMPARE_FILL} stroke={COMPARE_COLOR} strokeWidth="2" strokeDasharray="4 4" strokeLinejoin="round" />
+      )}
+      {/* 데이터 영역 (최근 로드맵 — 파란색) */}
       <polygon points={dataPoints} fill={BRAND_FILL} stroke={BRAND} strokeWidth="2.5" strokeLinejoin="round" />
+      {/* 비교 꼭짓점 */}
+      {compareValues &&
+        compareValues.map((v, i) => {
+          const [x, y] = point(i, (clamp(v) / max) * radius * t);
+          return <circle key={`compare-${i}`} cx={x} cy={y} r="3.5" fill="#fff" stroke={COMPARE_COLOR} strokeWidth="2" />;
+        })}
       {/* 꼭짓점 */}
       {values.map((v, i) => {
         const [x, y] = point(i, (clamp(v) / max) * radius * t);
@@ -195,6 +212,7 @@ export default function RoadmapResult() {
   const [error, setError] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
   const [analysis, setAnalysis] = useState<RoadmapAnalysis | null>(null);
+  const [initialAnalysis, setInitialAnalysis] = useState<RoadmapAnalysis | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown> | null>(null);
   const [majorCourses, setMajorCourses] = useState<MajorCoursesResponse | null>(null);
 
@@ -218,6 +236,8 @@ export default function RoadmapResult() {
         setNickname(me?.nickname ?? "");
         setAnalysis(mine.latest.result);
         setAnswers(mine.latest.answers);
+        // 최초 로드맵과 최근 로드맵이 다른 스냅샷일 때만 비교용으로 사용 (한 번만 만든 경우엔 겹쳐 그릴 필요 없음)
+        setInitialAnalysis(mine.initial && mine.initial.createdAt !== mine.latest.createdAt ? mine.initial.result : null);
         setMajorCourses(majors);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "로드맵을 불러오지 못했습니다.");
@@ -273,8 +293,23 @@ export default function RoadmapResult() {
           {/* ── 종합 코멘트 ── */}
           <SectionCard label="종합 코멘트">
             <div style={{ display: "flex", alignItems: "center", gap: "28px", flexWrap: "wrap" }}>
-              <div style={{ flex: "0 0 280px", display: "flex", justifyContent: "center" }}>
-                <RadarChart values={RADAR_AXES.map((a) => analysis.radar[a.key])} labels={RADAR_AXES.map((a) => a.label)} max={10} />
+              <div style={{ flex: "0 0 280px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+                <RadarChart
+                  values={RADAR_AXES.map((a) => analysis.radar[a.key])}
+                  labels={RADAR_AXES.map((a) => a.label)}
+                  max={10}
+                  compareValues={initialAnalysis ? RADAR_AXES.map((a) => initialAnalysis.radar[a.key]) : undefined}
+                />
+                {initialAnalysis && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "12px", color: "#64748b" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#94a3b8", display: "inline-block" }} /> 최초 로드맵
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: BRAND, display: "inline-block" }} /> 최근 로드맵
+                    </span>
+                  </div>
+                )}
               </div>
               <div style={{ width: "1px", alignSelf: "stretch", background: "#e5e7eb" }} />
               <div style={{ flex: 1, minWidth: "260px" }}>
