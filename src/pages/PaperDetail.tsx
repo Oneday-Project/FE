@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Paper } from './Papers'
 import { getToken } from '../lib/auth'
 import {
@@ -72,6 +73,10 @@ export default function PaperDetail({
   const [loading, setLoading] = useState(true)
   const [aiFailed, setAiFailed] = useState<'none' | 'unauthorized' | 'missing'>('none')
   const [relatedPage, setRelatedPage] = useState(0)
+  const [similar, setSimilar] = useState<Paper[]>([])
+
+  const navigate = useNavigate()
+  const openPaper = (arxivId: string) => navigate(`/papers?paper=${encodeURIComponent(arxivId)}`)
 
   const year = getYear(paper.publishedDate)
   const chips = getFieldNames(paper)
@@ -79,10 +84,12 @@ export default function PaperDetail({
   const doiText = paper.doi || paper.arxivId || '-'
   const importance = clampStarTier(paper.starTier)
 
-  const related = useMemo(
-    () => allPapers.filter(p => p.arxivId !== paper.arxivId),
-    [allPapers, paper.arxivId],
-  )
+  /* 함께 보면 좋은 논문 — GET /papers/paper/{arxivId}/similar (추천).
+     실패하거나 비었으면 목록(allPapers)에서 같은 분야 위주로 대체. */
+  const related = useMemo(() => {
+    if (similar.length > 0) return similar
+    return allPapers.filter(p => p.arxivId !== paper.arxivId)
+  }, [similar, allPapers, paper.arxivId])
   const relatedPageCount = Math.max(1, Math.ceil(related.length / 3))
   const relatedPapers = related.slice(relatedPage * 3, relatedPage * 3 + 3)
 
@@ -90,6 +97,39 @@ export default function PaperDetail({
     setBookmarked(paper.bookmarkCount > 0)
     setRelatedPage(0)
   }, [paper.arxivId, paper.bookmarkCount])
+
+  // 함께 보면 좋은 논문 — 유사 논문 추천 API
+  useEffect(() => {
+    const isHai = paper.arxivId.startsWith('hai-')
+    const url = isHai
+      ? `/api/papers/hai-papers/${encodeURIComponent(paper.arxivId.slice(4))}/similar?limit=9`
+      : `/api/papers/paper/${encodeURIComponent(paper.arxivId)}/similar?limit=9`
+
+    let cancelled = false
+    setSimilar([])
+
+    ;(async () => {
+      try {
+        const token = getToken()
+        const res = await fetch(url, {
+          headers: {
+            Accept: 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+        if (!res.ok || cancelled) return
+
+        const json = await res.json()
+        const list: unknown[] = Array.isArray(json) ? json : json.data ?? []
+        setSimilar(list.map(toRelatedPaper).filter((p): p is Paper => p !== null))
+      } catch {
+        // 실패 시 목록 기반 대체가 자동으로 쓰임
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [paper.arxivId])
 
   /*
     AI 요약: GET /ai-services/papers/{arxivId}
@@ -339,7 +379,9 @@ export default function PaperDetail({
               onClick={() => setRelatedPage(p => Math.max(0, p - 1))}
             />
             <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-              {relatedPapers.map(rp => <RelatedCard key={rp.arxivId} paper={rp} />)}
+              {relatedPapers.map(rp => (
+                <RelatedCard key={rp.arxivId} paper={rp} onOpen={() => openPaper(rp.arxivId)} />
+              ))}
             </div>
             <CarouselArrow
               direction="right"
@@ -499,12 +541,13 @@ function Skeleton() {
   )
 }
 
-function RelatedCard({ paper }: { paper: Paper }) {
+function RelatedCard({ paper, onOpen }: { paper: Paper; onOpen: () => void }) {
   const year = getYear(paper.publishedDate)
   const chips = getFieldNames(paper)
 
   return (
     <div
+      onClick={onOpen}
       style={{
         background: '#fff',
         borderRadius: '14px',
@@ -645,6 +688,40 @@ function getYear(date?: string) {
 
 function getFieldNames(paper: Paper) {
   return paper.researchFields?.filter(Boolean) ?? []
+}
+
+/* 유사 논문 추천 응답 항목 → RelatedCard 가 쓰는 최소 Paper 형태로 변환.
+   응답 필드가 확실치 않아(일반/휴먼AI·library형 등) 여러 이름을 방어적으로 흡수한다. */
+function toRelatedPaper(raw: unknown): Paper | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+
+  const isHai = r.type === 'hai'
+  const rawId = r.arxivId ?? r.id
+  if (rawId == null) return null
+  const arxivId = isHai ? `hai-${rawId}` : String(rawId)
+
+  const fields = Array.isArray(r.researchFields)
+    ? r.researchFields
+    : Array.isArray(r.tags)
+      ? r.tags
+      : []
+
+  return {
+    arxivId,
+    doi: (r.doi as string) ?? null,
+    title: (r.title as string) ?? '',
+    authors: [],
+    abstract: (r.abstract as string) ?? '',
+    researchFields: fields.filter((f): f is string => typeof f === 'string'),
+    publishedDate: (r.publishedDate as string) ?? '',
+    citationCount: 0,
+    influenceScore: 0,
+    journal: '',
+    pdfUrl: (r.pdfUrl as string) ?? '',
+    bookmarkCount: r.isBookmark || (r.bookmarkCount as number) > 0 ? 1 : 0,
+    starTier: (r.starTier as number) ?? 0,
+  }
 }
 
 function getAuthorNames(paper: Paper) {
