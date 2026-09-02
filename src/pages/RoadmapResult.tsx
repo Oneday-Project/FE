@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from "react-router-dom";
 import { fetchMe } from "../lib/auth";
 import { getMyRoadmap, getMajorCourses, type RoadmapAnalysis, type MajorCoursesResponse, type MajorCourse } from "../lib/roadmap";
@@ -200,7 +201,7 @@ function CourseChip({ course }: { course: MajorCourse }) {
   );
 }
 
-const pageBg = { width: "100%", minHeight: "100vh", background: "linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)" };
+const pageBg = { width: "100%", minHeight: "100vh" };
 
 /* =========================================================
  *  결과 페이지 — GET /roadmap/me + GET /roadmap/major-courses 로 조회
@@ -280,13 +281,13 @@ export default function RoadmapResult() {
 
   return (
     <div style={pageBg}>
-      <div style={{ maxWidth: "980px", margin: "0 auto", padding: "56px 48px 90px" }}>
+      <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "90px" }}>
         {/* 헤더 */}
-        <div style={{ marginBottom: "56px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+        <div style={{ marginBottom: HERO_GAP }}>
+          <h1 style={pageTitle}>
             {nickname ? `${nickname}님의 로드맵 결과입니다.` : "로드맵 결과입니다."}
           </h1>
-          <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
+          <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "44px" }}>

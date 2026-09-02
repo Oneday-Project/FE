@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 
 /* 피그마: 소개_서비스소개 (1436:13883 / 1436:13963)
    - 탭 2개: H-AI Grad 소개 / 휴먼AI공학전공 대학원 소개
@@ -10,8 +11,6 @@ const NAVY_60 = 'rgba(0,23,142,0.6)'
 const INK = '#3C3C43'
 const INK_80 = 'rgba(60,60,67,0.8)'
 const INK_40 = 'rgba(60,60,67,0.4)'
-const CONTENT_W = 1000
-
 type Tab = 'service' | 'grad'
 
 export default function About() {
@@ -21,23 +20,22 @@ export default function About() {
     <div style={{
       width: '100%',
       minHeight: '100vh',
-      background: '#F5F9FF',
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
       boxSizing: 'border-box',
       paddingBottom: '100px',
     }}>
-      <div style={{ maxWidth: `${CONTENT_W}px`, margin: '0 auto', padding: '72px 40px 0' }}>
+      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: 0 }}>
 
         {/* 헤더 */}
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: INK, margin: '0 0 12px' }}>
+        <h1 style={pageTitle}>
           내 관심 분야에서 시작하는 대학원 준비
         </h1>
-        <p style={{ fontSize: '15px', color: INK_80, margin: 0, lineHeight: 1.6 }}>
+        <p style={pageSubtitle}>
           내 관심 분야에서 시작하는 대학원 준비. 논문을 찾고 기록하며, 나에게 맞는 전공·논문 로드맵을 확인해보세요.
         </p>
 
         {/* 탭 */}
-        <div style={{ display: 'flex', marginTop: '40px', borderBottom: `1px solid ${INK_40}` }}>
+        <div style={{ display: 'flex', marginTop: HERO_GAP, borderBottom: `1px solid ${INK_40}` }}>
           <TabButton active={tab === 'service'} onClick={() => setTab('service')}>
             H - AI Grad 소개
           </TabButton>

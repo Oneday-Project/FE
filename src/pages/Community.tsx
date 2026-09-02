@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 
 /* 피그마: 커뮤니티_자유게시판_Final (1557:14288)
    - 피그마는 1440 고정(본문 1062)이라 구성·색만 가져오고 크기는 프로젝트 스케일(본문 1000)에 맞춤
@@ -110,23 +111,22 @@ export default function Community() {
     <div style={{
       width: '100%',
       minHeight: '100vh',
-      background: '#F5F9FF',
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
       boxSizing: 'border-box',
       paddingBottom: '100px',
     }}>
-      <div style={{ maxWidth: '1080px', margin: '0 auto', padding: '72px 40px 0', boxSizing: 'border-box' }}>
+      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: 0 }}>
 
         {/* 헤더 */}
-        <h1 style={{ fontSize: '28px', fontWeight: 700, color: INK, margin: '0 0 12px' }}>
+        <h1 style={pageTitle}>
           커뮤니티
         </h1>
-        <p style={{ fontSize: '15px', color: INK_80, margin: 0, lineHeight: 1.6 }}>
+        <p style={pageSubtitle}>
           대학원 진학과 연구에 대한 이야기를 자유롭게 나눠보세요.
         </p>
 
         {/* 상단 탭 */}
-        <div style={{ display: 'flex', gap: '32px', marginTop: '40px', borderBottom: `1px solid ${LINE}` }}>
+        <div style={{ display: 'flex', gap: '32px', marginTop: HERO_GAP, borderBottom: `1px solid ${LINE}` }}>
           <MainTab active={tab === 'free'} onClick={() => setTab('free')}>자유 게시판</MainTab>
           <MainTab active={tab === 'seniors'} onClick={() => setTab('seniors')}>선배들의 발자취</MainTab>
         </div>

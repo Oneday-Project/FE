@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate, useLocation } from "react-router-dom";
 import { createRoadmap, getMyRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
 
@@ -364,7 +365,7 @@ export default function Roadmap() {
     });
   };
 
-  const pageBg = { width: "100%", minHeight: "100vh", background: "linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)" };
+  const pageBg = { width: "100%", minHeight: "100vh" };
 
   if (loadingSaved) {
     return (
@@ -376,10 +377,10 @@ export default function Roadmap() {
 
   return (
     <div style={pageBg}>
-      <div style={{ maxWidth: "960px", margin: "0 auto", padding: "56px 48px 80px" }}>
-        <div style={{ marginBottom: "56px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: 800, color: "#0f172a", margin: 0 }}>내 로드맵, 지금 생성하기</h1>
-          <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
+      <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "80px" }}>
+        <div style={{ marginBottom: HERO_GAP }}>
+          <h1 style={pageTitle}>내 로드맵, 지금 생성하기</h1>
+          <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
           {loadError && <p style={{ fontSize: "13px", color: "#dc2626", marginTop: "8px" }}>{loadError}</p>}
         </div>
 

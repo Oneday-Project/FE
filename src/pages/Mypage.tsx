@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
+import { pageContainer, pageTitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import { clearToken, fetchMe, getToken, type Me } from '../lib/auth'
 import ReadStatusTag from '../components/ReadStatusTag'
@@ -75,14 +76,13 @@ export default function MyPage() {
     <div style={{
       width: '100%',
       minHeight: 'calc(100vh - 64px)',
-      background: 'linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)',
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
       boxSizing: 'border-box',
     }}>
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '56px 48px 80px' }}>
+      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '80px' }}>
 
         {/* 인사말 */}
-        <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#1a1a1a', marginBottom: '48px' }}>
+        <h1 style={{ ...pageTitle, margin: `0 0 ${HERO_GAP}` }}>
           {me?.nickname ?? ''}님, 반갑습니다.
         </h1>
 
