@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { PAGE_BACKGROUND } from './styles/pageTheme'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 
@@ -19,7 +20,9 @@ function App() {
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      background: 'linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)',
+      /* 배경은 여기서만 지정한다 — 페이지별로 다시 깔지 않기 */
+      background: PAGE_BACKGROUND,
+      backgroundRepeat: 'no-repeat',
     }}>
       <Routes>
         {/* 로그인 페이지는 Navbar/Footer 없이 */}

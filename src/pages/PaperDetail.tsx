@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { pageContainer } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import type { Paper } from './Papers'
 import { getToken } from '../lib/auth'
@@ -195,11 +196,10 @@ export default function PaperDetail({
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
       width: '100%',
       minHeight: '100vh',
-      background: '#F5F9FF',
       boxSizing: 'border-box',
     }}>
       {/* Back button */}
-      <div style={{ maxWidth: '860px', margin: '0 auto', padding: '20px 48px 0' }}>
+      <div style={{ ...pageContainer, paddingTop: '20px', paddingBottom: 0 }}>
         <button
           onClick={onBack}
           style={{
@@ -216,7 +216,7 @@ export default function PaperDetail({
         </button>
       </div>
 
-      <div style={{ maxWidth: '860px', margin: '0 auto', padding: '12px 48px 64px' }}>
+      <div style={{ ...pageContainer, paddingTop: '12px', paddingBottom: '64px' }}>
 
         {/* ── 헤더: 제목·저자(왼쪽) + 상세 카드 3개(오른쪽) ── */}
         <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '18px' }}>

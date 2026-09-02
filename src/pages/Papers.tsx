@@ -1,4 +1,5 @@
-import { useState, useEffect, useSyncExternalStore } from 'react'
+import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80 } from '../styles/pageTheme'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
 import ReadStatusTag from '../components/ReadStatusTag'
@@ -73,12 +74,54 @@ function toPaper(hai: HaiPaper): Paper {
 
 const importanceOptions = [1, 2, 3]
 
+/* 검색 결과 화면 (피그마: 논문 페이지 - 0624 › 1026:5604~5646)
+   결과 문구 → 구분선 → 정렬 탭 → 3열 카드 그리드(4줄) → 숫자 페이지네이션 */
+/* 태그 (피그마: Tag / Tag important — 논문 페이지 0624 › 1026:5576, 1026:5582)
+   default  : 흰 배경, stroke 없음, Pretendard Medium 16 / #3C3C43
+   selected : 흰 배경 + main color stroke 1.2px, Pretendard SemiBold 16 / #00178E
+   테두리는 미선택일 때도 transparent 로 잡아둬야 선택 시 크기가 안 튄다. */
+const TAG_BASE = {
+  padding: '8px 12px',
+  borderRadius: '100px',
+  background: '#fff',
+  fontFamily: 'inherit',
+  fontSize: '16px',
+  lineHeight: 'normal',
+  cursor: 'pointer',
+  transition: 'all 0.15s',
+} as const
+
+const tagStyle = (selected: boolean) => ({
+  ...TAG_BASE,
+  border: `1.2px solid ${selected ? '#00178E' : 'transparent'}`,
+  fontWeight: selected ? 600 : 500,
+  color: selected ? '#00178E' : INK,
+})
+
+// 필터 줄 라벨 (중요도 / 연도 / 분야) — Pretendard Medium 16 / #3C3C43
+const filterLabel = { fontSize: '16px', fontWeight: 500, color: INK, flexShrink: 0 } as const
+
+const STAR_ON = '#FFF188'   // 선택된 중요도 별
+const STAR_OFF = INK_80     // 미선택 별 (#3C3C43 80%)
+
+const RESULTS_PER_PAGE = 12
+const RESULT_PAGE_WINDOW = 5   // 페이지 번호는 한 번에 5개까지 노출
+const sortOptions = [
+  ['all', '전체'],
+  ['recent', '최신 순'],
+  ['cited', '인용 많은 순'],
+] as const
+type SortKey = (typeof sortOptions)[number][0]
+
 export default function Papers() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [importance, setImportance] = useState<number | null>(null)          // 중요도: 1개만 (미선택 가능)
   const [period, setPeriod] = useState<'1y' | '3y' | '5y' | 'custom' | null>(null) // 연도: 1개만 (미선택 가능)
   const [searchValue, setSearchValue] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const [searched, setSearched] = useState(false)              // 검색 버튼을 눌렀는지 (누르면 결과 화면으로 전환)
+  const [sort, setSort] = useState<SortKey>('all')
+  const [resultPage, setResultPage] = useState(0)
   const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarksSnapshot)
   const [showLoginGate, setShowLoginGate] = useState(false)   // 비로그인 상태로 카드를 눌렀을 때
   const navigate = useNavigate()
@@ -212,7 +255,43 @@ export default function Papers() {
 
   // 돋보기 버튼(또는 Enter)을 눌러야 현재 선택된 필터로 검색 적용
   const handleSearch = () => {
+    setSearched(true)   // 캐러셀 2개 → 검색 결과 그리드로 전환
+    setSort('all')
+    setResultPage(0)
     fetchPapers()  // 커서 없이 → 첫 페이지부터 현재 필터로 다시 조회
+  }
+
+  /* 검색 결과 정렬 — 백엔드에 정렬 파라미터가 없어서 받아온 목록에서 처리한다.
+     '전체'는 백엔드가 준 순서 그대로. */
+  const sortedResults = useMemo(() => {
+    if (sort === 'all') return papers
+    const list = [...papers]
+    if (sort === 'recent') {
+      list.sort((a, b) => (b.publishedDate ?? '').localeCompare(a.publishedDate ?? ''))
+    } else {
+      list.sort((a, b) => (b.citationCount ?? 0) - (a.citationCount ?? 0))
+    }
+    return list
+  }, [papers, sort])
+
+  const totalResultPages = Math.max(1, Math.ceil(sortedResults.length / RESULTS_PER_PAGE))
+  const pageResults = sortedResults.slice(
+    resultPage * RESULTS_PER_PAGE,
+    resultPage * RESULTS_PER_PAGE + RESULTS_PER_PAGE,
+  )
+
+  /* 페이지 이동. 마지막 페이지까지 왔는데 서버에 더 있으면(hasNext) 커서로 이어서 받아온다. */
+  const goResultPage = (next: number) => {
+    const clamped = Math.max(0, Math.min(next, totalResultPages - 1))
+    setResultPage(clamped)
+    if (clamped >= totalResultPages - 1 && hasNext && nextCursor && !loading) {
+      void fetchPapers(nextCursor)
+    }
+  }
+
+  const changeSort = (key: SortKey) => {
+    setSort(key)
+    setResultPage(0)
   }
 
   // 북마크 토글 — POST /papers/bookmark/{arxivId} (낙관적 업데이트, 실패 시 되돌림)
@@ -286,22 +365,16 @@ export default function Papers() {
     <div style={{
       width: '100%',
       minHeight: 'calc(100vh - 64px)',
-      background: 'linear-gradient(160deg, #ffffff 0%, #eaf0ff 40%, #ddeaff 100%)',
       boxSizing: 'border-box',
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
     }}>
-      <div style={{
-        maxWidth: '1080px',
-        margin: '0 auto',
-        padding: '56px 40px 60px',
-        boxSizing: 'border-box',
-      }}>
+      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '60px' }}>
         {/* Hero 섹션 */}
-        <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#1a1a1a', marginBottom: '12px', lineHeight: 1.2 }}>
+        <div style={{ marginBottom: HERO_GAP }}>
+          <h1 style={pageTitle}>
             내 분야 논문, 한 번에.
           </h1>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>
+          <p style={pageSubtitle}>
             관심 분야를 고르면 최신 트렌드 논문을 정리해드려요.
           </p>
         </div>
@@ -342,24 +415,19 @@ export default function Papers() {
 
         {/* 필터 (중요도, 연도, 분야) */}
         <div style={{ display: 'flex', gap: '32px', marginBottom: '44px', alignItems: 'flex-start' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280', width: '42px', flexShrink: 0 }}>중요도</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <span style={filterLabel}>중요도</span>
               {importanceOptions.map(opt => {
                 const active = importance === opt
-                const dim = importance !== null && !active   // 다른 걸 고르면 연하게
                 return (
                   <button key={opt} onClick={() => selectImportance(opt)}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: '3px',
-                      padding: '5px 11px', borderRadius: '20px',
-                      border: active ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
-                      background: 'transparent', cursor: 'pointer',
-                      opacity: dim ? 0.4 : 1,
-                      transition: 'all 0.15s',
+                      ...tagStyle(active),
+                      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '10px',
                     }}>
                     {Array.from({ length: opt }).map((_, i) => (
-                      <svg key={i} width="18" height="18" viewBox="0 0 24 24" fill={active ? '#FBBF24' : '#cbd5e1'}>
+                      <svg key={i} width="19" height="19" viewBox="0 0 24 24" fill={active ? STAR_ON : STAR_OFF}>
                         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
                       </svg>
                     ))}
@@ -367,44 +435,29 @@ export default function Papers() {
                 )
               })}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '13px', color: '#6b7280', width: '42px', flexShrink: 0 }}>연도</span>
-              {([['1y','최근 1년'],['3y','최근 3년'],['5y','최근 5년'],['custom','기간 설정']] as const).map(([key, label]) => {
-                const active = period === key
-                const dim = period !== null && !active   // 다른 걸 고르면 연하게
-                return (
-                  <button key={key} onClick={() => selectPeriod(key)} style={{
-                    padding: '6px 14px', fontSize: '12px',
-                    fontWeight: active ? 600 : 500,
-                    borderRadius: '20px',
-                    border: active ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
-                    background: 'transparent',
-                    color: active ? '#00178E' : '#6b7280', cursor: 'pointer',
-                    opacity: dim ? 0.4 : 1,
-                    transition: 'all 0.15s',
-                  }}>{label}</button>
-                )
-              })}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <span style={filterLabel}>연도</span>
+              {([['1y','최근 1년'],['3y','최근 3년'],['5y','최근 5년'],['custom','기간 설정']] as const).map(([key, label]) => (
+                <button key={key} onClick={() => selectPeriod(key)} style={tagStyle(period === key)}>
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
-            <span style={{ fontSize: '13px', color: '#6b7280', flexShrink: 0, paddingTop: '6px' }}>
-              분야 <span style={{ fontSize: '11px', color: '#9ca3af' }}>(최대 3개)</span>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', flex: 1 }}>
+            <span style={{ ...filterLabel, paddingTop: '8px' }}>
+              분야 <span style={{ fontSize: '12px', color: 'rgba(60,60,67,0.4)' }}>(최대 3개)</span>
             </span>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {tags.map(tag => {
                 const selected = selectedTags.includes(tag)
                 const disabled = !selected && selectedTags.length >= MAX_TAGS  // 3개 꽉 차면 나머지 비활성
                 return (
                   <button key={tag} onClick={() => toggleTag(tag)} disabled={disabled} style={{
-                    padding: '6px 14px', fontSize: '12px',
-                    fontWeight: selected ? 600 : 500,
-                    borderRadius: '20px',
-                    border: selected ? '1.5px solid #00178E' : '1.5px solid #D7DCE5',
-                    background: 'transparent',
-                    color: selected ? '#00178E' : '#6b7280',
+                    ...tagStyle(selected),
+                    // 3개를 다 고르면 나머지는 연하게 (선택 불가 표시)
                     opacity: disabled ? 0.4 : 1,
-                    cursor: disabled ? 'default' : 'pointer', transition: 'all 0.15s',
+                    cursor: disabled ? 'default' : 'pointer',
                   }}>{tag}</button>
                 )
               })}
@@ -424,8 +477,60 @@ export default function Papers() {
             {error}
           </div>
         )}
-        {/* 논문 목록 렌더링 */}
-        {!loading && !error && (
+        {/* 검색을 누른 뒤 — 선택한 조건에 맞는 검색 결과 (피그마 1026:5604~5646) */}
+        {!loading && !error && searched && (
+          <>
+            <h2 style={{ fontSize: '20px', fontWeight: 600, color: INK, margin: '0 0 14px' }}>
+              회원님이 선택한 조건에 맞는 검색 결과입니다.
+            </h2>
+            <div style={{ height: '1px', background: '#E3E8F5' }} />
+
+            {/* 정렬 탭 — 전체 / 최신 순 / 인용 많은 순 */}
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', margin: '16px 0 24px' }}>
+              {sortOptions.map(([key, label]) => {
+                const active = sort === key
+                return (
+                  <button key={key} onClick={() => changeSort(key)} style={{
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: '14px',
+                    fontWeight: active ? 600 : 500,
+                    color: active ? '#00178E' : 'rgba(60,60,67,0.4)',
+                    transition: 'color 0.15s',
+                  }}>{label}</button>
+                )
+              })}
+            </div>
+
+            {pageResults.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 0', color: '#9ca3af', fontSize: '14px' }}>
+                조건에 맞는 논문이 없습니다. 분야·중요도·연도를 조정해보세요.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px 16px' }}>
+                {pageResults.map(paper => (
+                  <PaperCard
+                    key={paper.arxivId}
+                    paper={paper}
+                    bookmarked={!!bookmarks[paper.arxivId]}
+                    onBookmark={() => handleBookmark(paper)}
+                    onClick={() => handleCardClick(paper)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {totalResultPages > 1 && (
+              <ResultPagination
+                page={resultPage}
+                totalPages={totalResultPages}
+                onChange={goResultPage}
+              />
+            )}
+          </>
+        )}
+
+        {/* 검색 전 기본 화면 — 캐러셀 2개 */}
+        {!loading && !error && !searched && (
           <>
             <PaperSection
               title="최근 동향 논문"
@@ -472,6 +577,92 @@ export default function Papers() {
         />
       )}
     </div>
+  )
+}
+
+/* 검색 결과 페이지네이션 — 피그마 1026:5631 (« ‹ 1 2 3 4 5 › »)
+   숫자 20px/현재 #00178E·나머지 rgba(60,60,67,0.8), 항목 간격 16px */
+function ResultPagination({
+  page, totalPages, onChange,
+}: {
+  page: number
+  totalPages: number
+  onChange: (next: number) => void
+}) {
+  // 현재 페이지가 가운데 오도록 5칸 창을 잡되, 양끝에서는 창을 안쪽으로 밀어붙인다
+  const start = Math.max(0, Math.min(page - 2, totalPages - RESULT_PAGE_WINDOW))
+  const numbers = Array.from(
+    { length: Math.min(RESULT_PAGE_WINDOW, totalPages) },
+    (_, i) => start + i,
+  )
+
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'center', alignItems: 'center',
+      gap: '16px', marginTop: '48px',
+    }}>
+      <PageArrow kind="first" disabled={page === 0} onClick={() => onChange(0)} />
+      <PageArrow kind="prev" disabled={page === 0} onClick={() => onChange(page - 1)} />
+
+      {numbers.map(i => (
+        <button
+          key={i}
+          onClick={() => onChange(i)}
+          aria-current={i === page ? 'page' : undefined}
+          style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: '16px', fontWeight: 500,
+            color: i === page ? '#00178E' : INK_80,
+            transition: 'color 0.15s',
+          }}
+        >{i + 1}</button>
+      ))}
+
+      <PageArrow kind="next" disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)} />
+      <PageArrow kind="last" disabled={page >= totalPages - 1} onClick={() => onChange(totalPages - 1)} />
+    </div>
+  )
+}
+
+// 페이지네이션 화살표 (« ‹ › ») — 목록 캐러셀과 같은 셰브론 모양을 쓴다
+function PageArrow({
+  kind, disabled, onClick,
+}: {
+  kind: 'first' | 'prev' | 'next' | 'last'
+  disabled: boolean
+  onClick: () => void
+}) {
+  const left = kind === 'first' || kind === 'prev'
+  const double = kind === 'first' || kind === 'last'
+  const label = { first: '첫 페이지', prev: '이전 페이지', next: '다음 페이지', last: '마지막 페이지' }[kind]
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      style={{
+        background: 'none', border: 'none', padding: 0, display: 'flex',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.3 : 1,
+        transition: 'opacity 0.15s',
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+        stroke={INK_80} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        {left ? (
+          <>
+            <path d="M14 18l-6-6 6-6" />
+            {double && <path d="M19 18l-6-6 6-6" />}
+          </>
+        ) : (
+          <>
+            <path d="M10 18l6-6-6-6" />
+            {double && <path d="M5 18l6-6-6-6" />}
+          </>
+        )}
+      </svg>
+    </button>
   )
 }
 

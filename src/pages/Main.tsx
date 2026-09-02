@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { RadarChart } from "./RoadmapResult";
 import { calculateScores } from "./roadmapScore";
 import ReadStatusTag from "../components/ReadStatusTag";
@@ -398,11 +399,11 @@ export default function Main() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "56px 48px" }}>
+    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "56px" }}>
       {/* 인사말 */}
-      <div style={{ marginBottom: "28px" }}>
-        <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#0f172a", margin: "0 0 6px" }}>안녕하세요, {userName}님!</h1>
-        <p style={{ fontSize: "15px", color: "#475569", margin: 0 }}>관심 분야 논문을 읽고, 나만의 대학원 진학 로드맵을 완성해보세요.</p>
+      <div style={{ marginBottom: HERO_GAP }}>
+        <h1 style={pageTitle}>안녕하세요, {userName}님!</h1>
+        <p style={pageSubtitle}>관심 분야 논문을 읽고, 나만의 대학원 진학 로드맵을 완성해보세요.</p>
       </div>
 
       {/* 흰 박스 */}
