@@ -88,12 +88,88 @@ function MiniCalendar() {
 }
 
 /* ── 기록 요약 통계 한 줄 ── */
-function StatRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+const STAT_ORANGE = "#F59E0B";
+const STAT_GREEN = "#00B454";
+
+function StatRow({
+  pillLabel,
+  pillColor,
+  icon,
+  label,
+  value,
+}: {
+  pillLabel: string;
+  pillColor: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-      <span style={{ fontSize: "16px", width: "22px", textAlign: "center" }}>{icon}</span>
+      <span
+        style={{
+          display: "inline-flex", alignItems: "center", gap: "5px",
+          height: "24px", padding: "0 11px", borderRadius: "999px",
+          background: `${pillColor}1F`, color: pillColor,
+          fontSize: "11px", fontWeight: 600, whiteSpace: "nowrap",
+        }}
+      >
+        {icon} {pillLabel}
+      </span>
       <span style={{ fontSize: "14px", color: "#475569" }}>{label}</span>
-      <b style={{ marginLeft: "auto", fontSize: "16px", color: BRAND }}>{value}</b>
+      <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>{value}</b>
+    </div>
+  );
+}
+
+function BookIcon({ color }: { color: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5V4.5z" />
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5z" />
+    </svg>
+  );
+}
+
+function CheckIcon({ color }: { color: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M8 12.4l2.7 2.7L16 9.8" />
+    </svg>
+  );
+}
+
+/* ── 카드 안 배지 아이콘 (흰 원/사각 배지 위에 얹는 SVG) ── */
+function PapersIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5.3A2 2 0 0 1 6 3.3h5.3v17.4H6A2 2 0 0 1 4 18.7V5.3z" />
+      <path d="M20 5.3a2 2 0 0 0-2-2h-5.3v17.4H18a2 2 0 0 0 2-2V5.3z" />
+      <path d="M14.6 7.8h3.2M14.6 10.8h3.2M14.6 13.8h2" />
+    </svg>
+  );
+}
+
+function RoadmapIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8.5" stroke={BRAND} strokeWidth="1.7" />
+      <path d="M12 3.5V12l7.3-3.6A8.5 8.5 0 0 0 12 3.5z" fill={BRAND} />
+    </svg>
+  );
+}
+
+function IconBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        width: "52px", height: "52px", borderRadius: "15px",
+        background: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 4px 14px rgba(15,23,42,0.10)", flexShrink: 0,
+      }}
+    >
+      {children}
     </div>
   );
 }
@@ -105,12 +181,14 @@ function NavCard({
   icon,
   variant,
   onClick,
+  decoration,
 }: {
   title: string;
   subtitle: string;
-  icon: string;
+  icon: React.ReactNode;
   variant: "gray" | "blue";
   onClick: () => void;
+  decoration?: boolean;
 }) {
   const blue = variant === "blue";
   return (
@@ -120,24 +198,61 @@ function NavCard({
         position: "relative",
         flex: 1,
         background: blue ? "#dbe4fb" : "#eef1f5",
-        borderRadius: "18px",
-        padding: "22px 24px",
+        borderRadius: "20px",
+        padding: "22px 60px 22px 24px",
         cursor: "pointer",
-        overflow: "hidden",
         transition: "0.15s",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        gap: "18px",
+        minHeight: "128px",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
       onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
     >
-      <div style={{ paddingRight: "36px" }}>
+      {/* 장식: 각 카드에 딸려있어서 호버로 카드가 움직이면 같이 움직임.
+          회색 카드 = 흰 원, z-index로 항상 앞에 옴 → 겹치는 부분은 흰색.
+          파란 카드 = 카드와 같은 색으로 붙어서 위로 뾰족 튀어나오는 돌기, z-index 없이 뒤에 있어서 흰 원에 안 가려진 끝부분만 보임 */}
+      {decoration && !blue && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute", zIndex: 2, bottom: "-40px", left: "74%",
+            transform: "translateX(-50%)",
+            width: "80px", height: "80px", borderRadius: "50%",
+            background: "#fff", boxShadow: "0 4px 14px rgba(15,23,42,0.10)",
+          }}
+        />
+      )}
+      {decoration && blue && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute", top: "-80px", left: "74%",
+            transform: "translateX(-50%)",
+            width: "50px", height: "80px", borderRadius: "25px 25px 0 0",
+            background: "#dbe4fb",
+          }}
+        />
+      )}
+      <div>
         <h3 style={{ fontSize: "16px", fontWeight: 800, color: blue ? BRAND : "#1e293b", margin: "0 0 8px" }}>{title}</h3>
         <p style={{ fontSize: "12.5px", color: blue ? "#3b4a8c" : "#64748b", lineHeight: 1.5, margin: 0 }}>{subtitle}</p>
       </div>
-      {/* 아이콘 */}
-      <div style={{ position: "absolute", right: "48px", bottom: "14px", fontSize: "34px", opacity: 0.9 }}>{icon}</div>
+      {/* 아이콘 배지 */}
+      <IconBadge>{icon}</IconBadge>
       {/* 화살표 */}
-      <div style={{ position: "absolute", right: "18px", top: "50%", transform: "translateY(-50%)", color: blue ? BRAND : "#94a3b8" }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <div
+        style={{
+          position: "absolute", right: "18px", top: "50%", transform: "translateY(-50%)",
+          width: "34px", height: "34px", borderRadius: "50%",
+          background: "#fff", boxShadow: "0 2px 8px rgba(15,23,42,0.10)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: BRAND,
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
           <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
@@ -413,26 +528,32 @@ export default function Main() {
           <MiniCalendar />
           <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "24px 0 14px" }}>월간 기록 요약</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <StatRow icon="📖" label="읽는 중" value="5편" />
-            <StatRow icon="✅" label="완독 논문" value="5편" />
-            <StatRow icon="🔥" label="연속 기록" value="6일" />
+            <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value="5편" />
+            <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value="5편" />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "14px" }}>🔥🔥🔥</span>
+              <span style={{ fontSize: "14px", color: "#475569" }}>연속 기록</span>
+              <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>6일</b>
+            </div>
           </div>
         </div>
 
-        {/* 오른쪽: 이동 카드 2개 */}
-        <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* 오른쪽: 이동 카드 2개 (파란 카드 위쪽에 붙는 볼록 원 장식 — 호버 시 카드와 같이 움직임) */}
+        <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: "28px" }}>
           <NavCard
             variant="gray"
             title="내 관심 분야 논문, 한눈에"
             subtitle="관심 분야별 최신 논문을 모아보고 기록을 관리하세요."
-            icon="📄"
+            icon={<PapersIcon />}
             onClick={() => navigate("/papers")}
+            decoration
           />
           <NavCard
             variant="blue"
             title="나에게 맞는 대학원 준비 로드맵"
             subtitle="진로 준비 상태를 확인하고, 관심 분야에 맞는 전공·과목과 논문 추천을 받아보세요."
-            icon="📊"
+            icon={<RoadmapIcon />}
+            decoration
             onClick={() => navigate("/roadmap")}
           />
         </div>
