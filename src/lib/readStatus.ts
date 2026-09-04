@@ -3,7 +3,8 @@
 //   GET  /papers/library?type=reading|completed             → 읽는 중 / 다 읽은 목록
 //   POST /papers/paper/{arxivId}/reading-status/reading     → 일반 논문 읽는중 토글
 //   POST /papers/paper/{arxivId}/reading-status/complete    → 일반 논문 읽기 완료
-//   POST /papers/hai-papers/{id}/reading-status(/complete)  → 휴먼AI 논문
+//   POST /papers/hai-papers/{id}/reading-status/reading     → 휴먼AI 논문 읽는중 토글
+//   POST /papers/hai-papers/{id}/reading-status/complete    → 휴먼AI 논문 읽기 완료
 //
 // 논문 상세·목록·메인·마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
@@ -31,6 +32,9 @@ export type ReadStatusMap = Record<string, ReadEntry>
 let cache: ReadStatusMap = {}
 let loaded = false
 let loading: Promise<void> | null = null
+/* 계정이 바뀔 때마다 올린다. 이전 계정으로 띄운 요청이 늦게 도착해도
+   generation 이 달라서 캐시를 덮어쓰지 못한다. */
+let generation = 0
 const listeners = new Set<() => void>()
 
 function emit(next: ReadStatusMap): void {
@@ -101,6 +105,7 @@ async function fetchLibrary(type: 'reading' | 'completed'): Promise<LibraryItem[
 function ensureLoaded(): void {
   if (loaded || loading || !getToken()) return
 
+  const gen = generation
   loading = (async () => {
     try {
       // 읽는 중 + 다 읽은 논문을 모두 불러와 하나의 map 으로
@@ -108,6 +113,8 @@ function ensureLoaded(): void {
         fetchLibrary('reading'),
         fetchLibrary('completed'),
       ])
+
+      if (gen !== generation) return   // 그 사이 계정이 바뀜 → 버린다
 
       const next: ReadStatusMap = {}
       for (const item of [...reading, ...completed]) {
@@ -120,9 +127,24 @@ function ensureLoaded(): void {
     } catch {
       // 실패 시 다음 구독에서 다시 시도
     } finally {
-      loading = null
+      if (gen === generation) loading = null
     }
   })()
+}
+
+/* 로그인/로그아웃/계정 전환 시 이전 사용자의 읽음 기록이 화면에 남지 않게 비운다.
+   loaded 를 되돌려서 새 계정 기준으로 다시 받아오게 하는 게 핵심 —
+   이걸 안 해서 "가입했는데 다 읽은 논문이 이미 차 있고, 새로고침하면 사라지는" 문제가 있었다. */
+export function resetReadStatus(): void {
+  generation += 1
+  loaded = false
+  loading = null
+  emit({})
+  ensureLoaded()   // 새 계정 토큰이 있으면 바로 다시 받아온다
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth-change', resetReadStatus)
 }
 
 export function getReadStatus(arxivId: string): ReadStatus | null {
@@ -141,16 +163,14 @@ export async function setReadStatus(paper: SavedPaper, next: ReadStatus | null):
   const current = cache[paper.arxivId]?.status ?? null
   const optimistic = { ...cache }
 
-  /* 휴먼AI 논문은 arxivId가 "hai-{id}" 로 인코딩돼 있어 엔드포인트가 다름.
-     읽는중 토글 경로도 종류마다 다름:
-       일반   → /papers/paper/{arxivId}/reading-status/reading
-       휴먼AI → /papers/hai-papers/{id}/reading-status   (suffix 없음)
-     완료는 둘 다 base + /complete */
+  /* 휴먼AI 논문은 arxivId가 "hai-{id}" 로 인코딩돼 있어 base 경로가 다르다.
+     suffix 는 둘 다 같음 — 읽는중 /reading, 완료 /complete.
+     (이전엔 휴먼AI만 suffix 없이 호출해서 404 → 낙관적 업데이트가 매번 롤백됐다) */
   const isHai = paper.arxivId.startsWith('hai-')
   const base = isHai
     ? `/api/papers/hai-papers/${encodeURIComponent(paper.arxivId.slice(4))}/reading-status`
     : `/api/papers/paper/${encodeURIComponent(paper.arxivId)}/reading-status`
-  const readingUrl = isHai ? base : `${base}/reading`
+  const readingUrl = `${base}/reading`
 
   let url: string
 
@@ -168,13 +188,15 @@ export async function setReadStatus(paper: SavedPaper, next: ReadStatus | null):
     url = readingUrl
   }
 
+  const gen = generation
   emit(optimistic)
 
   try {
     const res = await fetch(url, { method: 'POST', headers: authHeaders() })
     if (!res.ok) throw new Error(String(res.status))
   } catch {
-    emit(before) // 서버 반영 실패 → 원래대로
+    // 그 사이 계정이 바뀌었으면 이전 계정 데이터를 되살리면 안 된다
+    if (gen === generation) emit(before)
   }
 }
 

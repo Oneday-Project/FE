@@ -26,10 +26,15 @@ export function setToken(accessToken: string, refreshToken?: string): void {
   window.dispatchEvent(new Event('auth-change'))
 }
 
-// 로그아웃 시 호출 — 토큰 삭제 후 변경을 알림
+/* 로그아웃 시 호출 — 토큰과 "내 데이터"를 지우고 변경을 알림.
+   roadmapAnswers 를 남겨두면 같은 브라우저에서 새로 가입한 사람에게
+   이전 사용자의 로드맵이 그대로 보인다. */
+const USER_DATA_KEYS = ['roadmapAnswers']
+
 export function clearToken(): void {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  USER_DATA_KEYS.forEach(key => localStorage.removeItem(key))
   sessionStorage.clear()
   window.dispatchEvent(new Event('auth-change'))
 }

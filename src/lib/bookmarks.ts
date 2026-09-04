@@ -21,6 +21,9 @@ type BookmarkMap = Record<string, BookmarkedPaper>
 let cache: BookmarkMap = {}
 let loaded = false
 let loading: Promise<void> | null = null
+/* 계정이 바뀔 때마다 올린다. 이전 계정으로 띄운 요청이 늦게 도착해도
+   generation 이 달라서 캐시를 덮어쓰지 못한다. */
+let generation = 0
 const listeners = new Set<() => void>()
 
 function emit(next: BookmarkMap): void {
@@ -64,6 +67,7 @@ function toBookmarkedPaper(item: LibraryItem): BookmarkedPaper | null {
 function ensureLoaded(): void {
   if (loaded || loading || !getToken()) return
 
+  const gen = generation
   loading = (async () => {
     try {
       const next: BookmarkMap = {}
@@ -79,14 +83,29 @@ function ensureLoaded(): void {
         if (page >= (json.totalPages ?? 1)) break
       }
 
+      if (gen !== generation) return   // 그 사이 계정이 바뀜 → 버린다
+
       loaded = true
       emit(next)
     } catch {
       // 네트워크 실패 시 다음 구독에서 다시 시도
     } finally {
-      loading = null
+      if (gen === generation) loading = null
     }
   })()
+}
+
+/* 로그인/로그아웃/계정 전환 시 이전 사용자의 북마크가 화면에 남지 않게 비운다. */
+export function resetBookmarks(): void {
+  generation += 1
+  loaded = false
+  loading = null
+  emit({})
+  ensureLoaded()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth-change', resetBookmarks)
 }
 
 export function isBookmarked(arxivId: string): boolean {
@@ -104,6 +123,7 @@ export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
   if (next[paper.arxivId]) delete next[paper.arxivId]
   else next[paper.arxivId] = paper
 
+  const gen = generation
   emit(next)
 
   // 휴먼AI 논문은 별도 엔드포인트
@@ -118,7 +138,8 @@ export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
     const res = await fetch(url, { method: 'POST', headers: authHeaders() })
     if (!res.ok) throw new Error(String(res.status))
   } catch {
-    emit(before) // 서버 반영 실패 → 원래대로
+    // 그 사이 계정이 바뀌었으면 이전 계정 데이터를 되살리면 안 된다
+    if (gen === generation) emit(before)
   }
 }
 

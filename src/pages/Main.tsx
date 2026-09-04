@@ -1,11 +1,15 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { RadarChart } from "./RoadmapResult";
-import { calculateScores } from "./roadmapScore";
+import { getToken } from "../lib/auth";
+import { getMyRoadmap, type RoadmapAnalysis } from "../lib/roadmap";
 import ReadStatusTag from "../components/ReadStatusTag";
 import { subscribeReadStatus, getReadStatusSnapshot } from "../lib/readStatus";
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from "../lib/bookmarks";
+import {
+  fetchReadingCalendar, dateKey, EMPTY_CALENDAR, type ReadingCalendar,
+} from "../lib/readingCalendar";
 
 const BRAND = "#00178E";
 
@@ -14,19 +18,13 @@ const userName = "wnnye";
 
 /* ── 미니 캘린더 ─────────────────────────────────────────
    reading = 읽는 중(연한 파랑), done = 읽기 완료(진한 파랑)
-   실제로는 백엔드에서 "날짜별 활동" 받아서 activity 로 넣으면 됨 */
-type Activity = "reading" | "done";
-const mockActivity: Record<number, Activity> = {
-  3: "done", 4: "done", 5: "reading",
-  10: "done", 11: "done", 12: "reading", 13: "reading",
-  18: "reading", 19: "done", 20: "reading",
-  24: "reading", 25: "reading",
-};
-
-function MiniCalendar() {
+   GET /papers/reading-status/calendar 로 내 날짜별 활동을 받아서 칠한다.
+   (예전에는 mockActivity 상수가 하드코딩돼 있어서 누가 가입해도 같은 날짜가 칠해져 보였다) */
+function MiniCalendar({ activity }: { activity: ReadingCalendar["days"] }) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth(); // 0-based
+
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay(); // 0=일
   const startOffset = (firstDay + 6) % 7; // 월요일 시작으로 보정
@@ -36,9 +34,12 @@ function MiniCalendar() {
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
+  const activityFor = (day: number | null) =>
+    day ? activity[dateKey(year, month, day)] : undefined;
+
   const bgFor = (day: number | null) => {
     if (!day) return "transparent";
-    const a = mockActivity[day];
+    const a = activityFor(day);
     if (a === "done") return "#7f9bec";
     if (a === "reading") return "#d3ddf9";
     return "#f1f5f9";
@@ -66,8 +67,8 @@ function MiniCalendar() {
               alignItems: "center",
               justifyContent: "center",
               fontSize: "10px",
-              color: day && mockActivity[day] === "done" ? "#fff" : "#94a3b8",
-              fontWeight: day && mockActivity[day] ? 600 : 400,
+              color: activityFor(day) === "done" ? "#fff" : "#94a3b8",
+              fontWeight: activityFor(day) ? 600 : 400,
             }}
           >
             {day ?? ""}
@@ -260,23 +261,60 @@ function NavCard({
   );
 }
 
+/* 방사형 축 — 백엔드 radar 응답 키 순서 고정. RoadmapResult.tsx 의 RADAR_AXES 와 같아야 한다. */
+const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
+  { key: "preparation", label: "이해도" },
+  { key: "experience", label: "경험" },
+  { key: "paper", label: "논문 루틴" },
+  { key: "interest", label: "관심 분야" },
+  { key: "academic", label: "학업" },
+];
+
 /* ── My 로드맵 요약 섹션 ──
-   저장된 로드맵 답변을 기반으로 방사형+점수 요약을 보여주고,
-   "자세히 보기" 누르면 결과 페이지로(저장된 답 넘겨서) 이동 */
+   GET /roadmap/me 로 서버에 저장된 최신 로드맵을 받아 방사형+점수 요약을 보여준다.
+   예전엔 localStorage("roadmapAnswers")를 읽었는데, 그러면
+     - 로그아웃해도 남아서 같은 브라우저의 새 계정에 이전 사람 로드맵이 보이고
+     - 로그아웃 시 지우면 같은 계정으로 다시 로그인해도 안 보인다
+   로드맵 페이지 3개(Roadmap·RoadmapHome·RoadmapResult)는 이미 서버에서 받아오므로 그쪽에 맞춘다. */
 function MyRoadmapSection() {
   const navigate = useNavigate();
 
-  const saved = (() => {
-    try {
-      const s = localStorage.getItem("roadmapAnswers");
-      return s ? (JSON.parse(s) as Record<string, string | string[]>) : null;
-    } catch {
-      return null;
-    }
-  })();
+  const [analysis, setAnalysis] = useState<RoadmapAnalysis | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  /* 계정이 바뀌면 다시 받아온다 (로그아웃 시엔 비운다) */
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = () => {
+      setAnalysis(null);
+      if (!getToken()) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      getMyRoadmap()
+        .then((mine) => {
+          if (cancelled) return;
+          setAnalysis(mine.hasRoadmap && mine.latest ? mine.latest.result : null);
+        })
+        .catch(() => { if (!cancelled) setAnalysis(null); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+
+    load();
+    window.addEventListener("auth-change", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("auth-change", load);
+    };
+  }, []);
+
+  // 불러오는 중에는 "없어요" 를 깜빡이지 않게 아무것도 그리지 않는다
+  if (loading) return null;
 
   // 아직 로드맵을 안 만든 경우 → 안내
-  if (!saved) {
+  if (!analysis) {
     return (
       <section style={{ marginTop: "64px" }}>
         <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 8px" }}>My 로드맵</h2>
@@ -294,15 +332,9 @@ function MyRoadmapSection() {
     );
   }
 
-  const scores = calculateScores(saved);
-  const tags = Array.isArray(saved.q2) ? saved.q2 : [];
-  const axes = [
-    { label: "이해도", v: scores.prep },
-    { label: "경험", v: scores.exp },
-    { label: "논문 루틴", v: scores.paper },
-    { label: "포트폴리오", v: scores.portfolio },
-    { label: "성적", v: scores.study },
-  ];
+  const totalScore = analysis.overview.totalScore;
+  const tags = analysis.overview.interestFields ?? [];
+  const axes = RADAR_AXES.map((a) => ({ label: a.label, v: analysis.radar[a.key] }));
   const strong = axes.reduce((a, b) => (b.v > a.v ? b : a));
   const weak = axes.reduce((a, b) => (b.v < a.v ? b : a));
 
@@ -314,13 +346,13 @@ function MyRoadmapSection() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "40px", flexWrap: "wrap" }}>
           <div style={{ flex: "0 0 280px", display: "flex", justifyContent: "center" }}>
-            <RadarChart values={axes.map((a) => a.v)} labels={axes.map((a) => a.label)} max={20} />
+            <RadarChart values={axes.map((a) => a.v)} labels={axes.map((a) => a.label)} max={10} />
           </div>
 
           <div style={{ flex: 1, minWidth: "280px" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "16px" }}>
               <span style={{ fontSize: "16px", color: "#475569" }}>종합 점수</span>
-              <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{scores.total}점</b>
+              <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{totalScore}점</b>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "18px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "14px", color: "#64748b", marginRight: "2px" }}>관심 분야</span>
@@ -329,14 +361,14 @@ function MyRoadmapSection() {
               ))}
             </div>
             <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: "0 0 24px" }}>
-              현재 준비도는 <b style={{ color: BRAND }}>{scores.total}점</b>이에요.<br />
+              현재 준비도는 <b style={{ color: BRAND }}>{totalScore}점</b>이에요.<br />
               강점은 <b>{strong.label}</b> 영역이고,<br />
               다음 단계로는 <b>{weak.label}</b>을(를) 먼저 보완하면 좋아요.
             </p>
 
             <div style={{ textAlign: "right" }}>
               <button
-                onClick={() => navigate("/roadmap-result", { state: saved })}
+                onClick={() => navigate("/roadmap-result")}
                 style={{ padding: "12px 24px", background: "#7f9bec", color: "#fff", border: "none", borderRadius: "12px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
               >
                 내 로드맵 자세히 보기 &gt;
@@ -510,7 +542,35 @@ function CarouselArrow({ direction, disabled, onClick }: { direction: "left" | "
 }
 
 /* ── 메인 페이지 ── */
+/* 이번 달 읽음 기록 — 캘린더와 월간 요약이 같은 응답을 쓴다.
+   로그인 상태가 바뀌면(로그아웃·다른 계정) 이전 계정 기록이 남지 않게 비우고 다시 받아온다. */
+function useReadingCalendar(year: number, month0: number): ReadingCalendar {
+  const [calendar, setCalendar] = useState<ReadingCalendar>(EMPTY_CALENDAR);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = () => {
+      setCalendar(EMPTY_CALENDAR);
+      void fetchReadingCalendar(year, month0).then(next => {
+        if (!cancelled) setCalendar(next);
+      });
+    };
+
+    load();
+    window.addEventListener("auth-change", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("auth-change", load);
+    };
+  }, [year, month0]);
+
+  return calendar;
+}
+
 export default function Main() {
+  const today = new Date();
+  const calendar = useReadingCalendar(today.getFullYear(), today.getMonth());
   const navigate = useNavigate();
 
   return (
@@ -525,15 +585,16 @@ export default function Main() {
       <div style={{ background: "#fff", borderRadius: "24px", padding: "34px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)", display: "flex", gap: "32px", flexWrap: "wrap" }}>
         {/* 왼쪽: 캘린더 + 기록 요약 */}
         <div style={{ flex: "1 1 320px" }}>
-          <MiniCalendar />
+          <MiniCalendar activity={calendar.days} />
           <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "24px 0 14px" }}>월간 기록 요약</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value="5편" />
-            <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value="5편" />
+            <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value={`${calendar.readingCount}편`} />
+            <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value={`${calendar.completedCount}편`} />
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "14px" }}>🔥🔥🔥</span>
+              {/* 연속 기록이 없으면 불꽃도 빼고 0일로 (갓 가입한 계정에 6일이 떠 있던 문제) */}
+              <span style={{ fontSize: "14px" }}>{"🔥".repeat(Math.min(3, calendar.streak))}</span>
               <span style={{ fontSize: "14px", color: "#475569" }}>연속 기록</span>
-              <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>6일</b>
+              <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>{calendar.streak}일</b>
             </div>
           </div>
         </div>
