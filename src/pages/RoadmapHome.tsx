@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import { getToken } from '../lib/auth'
 import { getMyRoadmap } from '../lib/roadmap'
@@ -50,7 +50,8 @@ export default function RoadmapHome() {
         }}
       />
 
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '100px', textAlign: 'center' }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: '100px', textAlign: 'center' }}>
+
         <h1 style={pageTitle}>
           나에게 맞는 대학원 준비 로드맵
         </h1>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80 } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80 } from '../styles/pageTheme'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
 import ReadStatusTag from '../components/ReadStatusTag'
@@ -7,7 +7,14 @@ import { isLoggedIn, getToken } from '../lib/auth'
 import { subscribeReadStatus, getReadStatusSnapshot } from '../lib/readStatus'
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from '../lib/bookmarks'
 
-const tags = ['SML', 'ML', 'CV', 'NLP', 'Robotics', 'Retrieval AI', 'SAP', 'HCI', 'Multimodal', 'Code AI']
+/* 분야 태그 — 피그마와 같은 줄 구성으로 고정한다.
+   폭에 맡겨 자동 줄바꿈시키면 컨테이너가 1000px(피그마 1440 대비 좁음)이라
+   Retrieval AI 가 첫 줄에 붙어버려서, 줄 묶음을 코드에서 직접 정한다. */
+const TAG_ROWS = [
+  ['SML', 'ML', 'CV', 'NLP', 'Robotics'],
+  ['Retrieval AI', 'SAP', 'HCI', 'Multimodal'],
+  ['Code AI'],
+] as const
 const MAX_TAGS = 3 // 분야는 최대 3개까지 선택
 
 // 논문 데이터 타입 정의 (백엔드 응답 형식과 일치해야 함)
@@ -15,7 +22,7 @@ export type Paper = {
   arxivId: string
   doi: string | null
   title: string
-  authors: { id: number; name: string; authorId: string }[]
+  authors: string[]          // 백엔드가 ["Maya Murad","Ece Kamar"] 형태의 문자열 배열로 내려줌
   abstract: string
   researchFields: string[]   // 백엔드가 ["AI","HCI"] 형태의 문자열 배열로 내려줌
   publishedDate: string
@@ -49,6 +56,7 @@ type HaiPaper = {
   authors?: string[]
   academic_advisor?: string
   department?: string
+  researchFields?: string[]
   abstract?: string
   publishedYear?: string
   pdfUrl?: string
@@ -56,12 +64,13 @@ type HaiPaper = {
 
 function toPaper(hai: HaiPaper): Paper {
   return {
-    arxivId: `hai-${hai.id}`,          // 카드 key 용 (북마크 API는 지원 안 함)
+    arxivId: `hai-${hai.id}`,          // 카드 key 용 ("hai-" 접두사로 일반 논문과 구분)
     doi: hai.doi ?? null,
     title: hai.title,
-    authors: (hai.authors ?? []).map((name, i) => ({ id: i, name, authorId: String(i) })),
+    authors: hai.authors ?? [],
     abstract: hai.abstract ?? '',
-    researchFields: hai.department ? [hai.department] : [],
+    // 휴먼AI 응답도 researchFields(["ML","CV"])를 내려준다. 없을 때만 학과명으로 대체
+    researchFields: hai.researchFields ?? (hai.department ? [hai.department] : []),
     publishedDate: hai.publishedYear ? `${hai.publishedYear}-01-01` : '',
     citationCount: 0,
     influenceScore: 0,
@@ -103,6 +112,17 @@ const filterLabel = { fontSize: '16px', fontWeight: 500, color: INK, flexShrink:
 
 const STAR_ON = '#FFF188'   // 선택된 중요도 별
 const STAR_OFF = INK_80     // 미선택 별 (#3C3C43 80%)
+
+/* 논문 카드 (피그마 기준) — 높이 255 / 내부 항목 간격 12
+   제목 Pretendard Medium 16 · 행간 19, 본문 Regular 12 · 행간 16
+   분야 태그 좌우패딩 8 · 상하패딩 6, 태그 간 간격 10 */
+const CARD_HEIGHT = '255px'
+const CARD_GAP = '12px'
+const CARD_TITLE = { fontSize: '16px', fontWeight: 500, lineHeight: '19px' } as const
+const CARD_BODY = { fontSize: '12px', fontWeight: 400, lineHeight: '16px' } as const
+const CHIP_GAP = '10px'
+const BOOKMARK_ON = 'rgba(59,130,246,0.7)'   // #3B82F6 70%
+const MAIN_NAVY = '#00178E'                  // 페이지네이션 · 더보기 버튼 메인컬러
 
 const RESULTS_PER_PAGE = 12
 const RESULT_PAGE_WINDOW = 5   // 페이지 번호는 한 번에 5개까지 노출
@@ -156,8 +176,7 @@ export default function Papers() {
   }, [])
 
   /* 휴먼AI공학전공 논문 — GET /papers/hai-papers
-     일반 논문과 응답 형태가 달라서(publishedYear, authors: string[], researchFields 없음)
-     화면에서 쓰는 Paper 모양으로 변환해서 사용한다. */
+     일반 논문과 응답 형태가 달라서(id, publishedYear 등) 화면에서 쓰는 Paper 모양으로 변환해서 쓴다. */
   const fetchHaiPapers = async () => {
     try {
       const res = await fetch(`${API_PREFIX}/papers/hai-papers`, { headers: authHeaders() })
@@ -368,7 +387,7 @@ export default function Papers() {
       boxSizing: 'border-box',
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
     }}>
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '60px' }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: '60px' }}>
         {/* Hero 섹션 */}
         <div style={{ marginBottom: HERO_GAP }}>
           <h1 style={pageTitle}>
@@ -414,7 +433,7 @@ export default function Papers() {
         </div>
 
         {/* 필터 (중요도, 연도, 분야) */}
-        <div style={{ display: 'flex', gap: '32px', marginBottom: '44px', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: '24px', marginBottom: '44px', alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <span style={filterLabel}>중요도</span>
@@ -444,23 +463,44 @@ export default function Papers() {
               ))}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', flex: 1 }}>
-            <span style={{ ...filterLabel, paddingTop: '8px' }}>
-              분야 <span style={{ fontSize: '12px', color: 'rgba(60,60,67,0.4)' }}>(최대 3개)</span>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
+            {/* 라벨은 '분야 ⓘ' 로 짧게 — "(최대 3개)" 를 그대로 두면 태그 줄이 들어갈 폭이 안 남는다.
+               ⓘ 는 자리만 잡아둔 임시 아이콘(말풍선 디자인 이미지로 교체 예정) */}
+            <span style={{ ...filterLabel, paddingTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              분야
+              <button
+                type="button"
+                aria-label="분야는 최대 3개까지 선택할 수 있습니다"
+                title="분야는 최대 3개까지 선택할 수 있습니다"
+                style={{
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', lineHeight: 0,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                  stroke="rgba(60,60,67,0.4)" strokeWidth="1.8" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9.5" />
+                  <path d="M12 10.5v6M12 7.4h.01" />
+                </svg>
+              </button>
             </span>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {tags.map(tag => {
-                const selected = selectedTags.includes(tag)
-                const disabled = !selected && selectedTags.length >= MAX_TAGS  // 3개 꽉 차면 나머지 비활성
-                return (
-                  <button key={tag} onClick={() => toggleTag(tag)} disabled={disabled} style={{
-                    ...tagStyle(selected),
-                    // 3개를 다 고르면 나머지는 연하게 (선택 불가 표시)
-                    opacity: disabled ? 0.4 : 1,
-                    cursor: disabled ? 'default' : 'pointer',
-                  }}>{tag}</button>
-                )
-              })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {TAG_ROWS.map((row, rowIndex) => (
+                <div key={rowIndex} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {row.map(tag => {
+                    const selected = selectedTags.includes(tag)
+                    const disabled = !selected && selectedTags.length >= MAX_TAGS  // 3개 꽉 차면 나머지 비활성
+                    return (
+                      <button key={tag} onClick={() => toggleTag(tag)} disabled={disabled} style={{
+                        ...tagStyle(selected),
+                        // 3개를 다 고르면 나머지는 연하게 (선택 불가 표시)
+                        opacity: disabled ? 0.4 : 1,
+                        cursor: disabled ? 'default' : 'pointer',
+                      }}>{tag}</button>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -506,7 +546,7 @@ export default function Papers() {
                 조건에 맞는 논문이 없습니다. 분야·중요도·연도를 조정해보세요.
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px 16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '24px 20px' }}>
                 {pageResults.map(paper => (
                   <PaperCard
                     key={paper.arxivId}
@@ -548,7 +588,6 @@ export default function Papers() {
               bookmarks={bookmarks}
               onBookmark={handleBookmark}
               onCardClick={handleCardClick}
-              bookmarkable={false}
             />
             {/* hasNext가 true일 때만 더보기 버튼 표시 */}
             {hasNext && (
@@ -557,7 +596,7 @@ export default function Papers() {
                   onClick={() => nextCursor && fetchPapers(nextCursor)}
                   style={{
                     padding: '10px 28px', fontSize: '14px', fontWeight: 500,
-                    background: '#3B6FE8', color: '#fff', border: 'none',
+                    background: MAIN_NAVY, color: '#fff', border: 'none',
                     borderRadius: '10px', cursor: 'pointer',
                   }}
                 >
@@ -599,27 +638,36 @@ function ResultPagination({
   return (
     <div style={{
       display: 'flex', justifyContent: 'center', alignItems: 'center',
-      gap: '16px', marginTop: '48px',
+      marginTop: '48px',
     }}>
-      <PageArrow kind="first" disabled={page === 0} onClick={() => onChange(0)} />
-      <PageArrow kind="prev" disabled={page === 0} onClick={() => onChange(page - 1)} />
+      {/* «  ‹ — 피그마에선 두 화살표가 5px 간격으로 붙어 있다 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <PageArrow kind="first" disabled={page === 0} onClick={() => onChange(0)} />
+        <PageArrow kind="prev" disabled={page === 0} onClick={() => onChange(page - 1)} />
+      </div>
 
-      {numbers.map(i => (
-        <button
-          key={i}
-          onClick={() => onChange(i)}
-          aria-current={i === page ? 'page' : undefined}
-          style={{
-            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: '16px', fontWeight: 500,
-            color: i === page ? '#00178E' : INK_80,
-            transition: 'color 0.15s',
-          }}
-        >{i + 1}</button>
-      ))}
+      {/* 숫자 — Pretendard Medium 20 / 간격 16, 화살표 묶음과는 34px 떨어져 있다 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', margin: '0 34px' }}>
+        {numbers.map(i => (
+          <button
+            key={i}
+            onClick={() => onChange(i)}
+            aria-current={i === page ? 'page' : undefined}
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: '20px', fontWeight: 500, lineHeight: 'normal',
+              color: i === page ? MAIN_NAVY : INK_80,
+              transition: 'color 0.15s',
+            }}
+          >{i + 1}</button>
+        ))}
+      </div>
 
-      <PageArrow kind="next" disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)} />
-      <PageArrow kind="last" disabled={page >= totalPages - 1} onClick={() => onChange(totalPages - 1)} />
+      {/* ›  » */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <PageArrow kind="next" disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)} />
+        <PageArrow kind="last" disabled={page >= totalPages - 1} onClick={() => onChange(totalPages - 1)} />
+      </div>
     </div>
   )
 }
@@ -648,7 +696,7 @@ function PageArrow({
         transition: 'opacity 0.15s',
       }}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      <svg width="15" height="30" viewBox="0 0 24 24" fill="none"
         stroke={INK_80} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         {left ? (
           <>
@@ -738,7 +786,7 @@ function LoginGateModal({ onClose, onLogin }: { onClose: () => void; onLogin: ()
 
 // 논문 섹션 컴포넌트 (제목 + 카드 슬라이더)
 function PaperSection({
-  title, subtitle, papers, bookmarks, onBookmark, onCardClick, bookmarkable = true,
+  title, subtitle, papers, bookmarks, onBookmark, onCardClick,
 }: {
   title: string
   subtitle?: string
@@ -746,7 +794,6 @@ function PaperSection({
   bookmarks: Record<string, unknown>   // lib/bookmarks 스냅샷 — 키가 있으면 북마크됨
   onBookmark: (paper: Paper) => void
   onCardClick: (paper: Paper) => void
-  bookmarkable?: boolean               // false면 북마크 버튼을 숨김(휴먼AI 논문)
 }) {
   const CARDS_PER_PAGE = 3 // 한 번에 보여줄 카드 수
   const [pageIndex, setPageIndex] = useState(0)
@@ -818,14 +865,13 @@ function PaperSection({
         </button>
 
         {/* 논문 카드 3개 그리드 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '20px' }}>
           {visiblePapers.map(paper => (
             <PaperCard
               key={paper.arxivId}
               paper={paper}
               bookmarked={!!bookmarks[paper.arxivId]}
               onBookmark={() => onBookmark(paper)}
-              bookmarkable={bookmarkable}
               onClick={() => onCardClick(paper)}
             />
           ))}
@@ -868,7 +914,7 @@ function PaperSection({
               width: i === pageIndex ? '20px' : '8px',
               height: '8px',
               borderRadius: '4px',
-              background: i === pageIndex ? '#3B6FE8' : '#d1d5db',
+              background: i === pageIndex ? MAIN_NAVY : '#d1d5db',
               transition: 'all 0.2s',
               border: 'none',
               padding: 0,
@@ -891,13 +937,12 @@ function PaperSection({
 
 // 개별 논문 카드 컴포넌트
 function PaperCard({
-  paper, bookmarked, onBookmark, onClick, bookmarkable = true,
+  paper, bookmarked, onBookmark, onClick,
 }: {
   paper: Paper
   bookmarked: boolean
   onBookmark: () => void
   onClick: () => void
-  bookmarkable?: boolean
 }) {
   const year = paper.publishedDate?.slice(0, 4) ?? '' // 출판연도 (앞 4자리)
   const chips = paper.researchFields ?? [] // 분야 칩 전체
@@ -905,15 +950,18 @@ function PaperCard({
   // 상세 페이지에서 지정한 읽음 상태 (localStorage 공유)
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
   const readStatus = readMap[paper.arxivId]?.status ?? null
-  const authorsText = paper.authors?.slice(0, 3).map(a => a.name).join(', ') ?? '' // 저자 최대 3명
 
   return (
     <div
       onClick={onClick}
       style={{
-        background: '#fff', borderRadius: '14px', padding: '18px',
+        background: '#fff', borderRadius: '14px', padding: '16px',
         boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-        display: 'flex', flexDirection: 'column', gap: '8px',
+        /* 피그마 기준 카드 높이 255. 그리드가 한 줄의 카드 높이를 맞춰주므로
+           minHeight 로 두면 태그가 두 줄이 돼도 잘리지 않고 한 줄 전체가 함께 늘어난다.
+           내부 항목 간격은 피그마와 동일하게 12px */
+        minHeight: CARD_HEIGHT, boxSizing: 'border-box', minWidth: 0,
+        display: 'flex', flexDirection: 'column', gap: CARD_GAP,
         cursor: 'pointer', transition: 'box-shadow 0.2s, transform 0.2s',
       }}
       onMouseEnter={e => {
@@ -926,58 +974,56 @@ function PaperCard({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {/* 읽음 상태 뱃지 — 상세 페이지에서 설정한 값. 없으면 빈 자리 */}
-        <ReadStatusTag status={readStatus} />
-        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지) — 휴먼AI 논문은 API 미지원이라 숨김 */}
-        {bookmarkable && (
-          <button
-            onClick={e => { e.stopPropagation(); onBookmark() }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+        {/* 읽음 상태 뱃지 — 상세 페이지에서 설정한 값. 아직 없으면 '읽기 전' 기본 상태 */}
+        <ReadStatusTag status={readStatus} showDefault />
+        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지)
+            휴먼AI 논문도 POST /papers/hai-papers/{id}/bookmark 로 토글된다 */}
+        <button
+          onClick={e => { e.stopPropagation(); onBookmark() }}
+          aria-label={bookmarked ? '북마크 해제' : '북마크'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', lineHeight: 0 }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24"
+            fill={bookmarked ? BOOKMARK_ON : 'none'}
+            stroke={bookmarked ? BOOKMARK_ON : 'rgba(60,60,67,0.4)'}
+            strokeWidth="2" strokeLinecap="round"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24"
-              fill={bookmarked ? '#3B6FE8' : 'none'}
-              stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
-              strokeWidth="2" strokeLinecap="round"
-            >
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-        )}
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
       </div>
 
-      <span style={{ fontSize: '11px', color: '#9ca3af' }}>{year}</span>
+      <span style={{ fontSize: '11px', lineHeight: '13px', color: '#9ca3af' }}>{year}</span>
 
-      {/* 논문 제목 (최대 3줄) */}
+      {/* 논문 제목 (최대 2줄) — Pretendard Medium 16 / 행간 19 */}
       <p style={{
-        fontSize: '13px', fontWeight: 700, color: '#1a1a1a', lineHeight: 1.5, margin: 0,
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        ...CARD_TITLE, color: INK, margin: 0,
+        // 긴 단어가 그리드 컬럼 폭을 밀어내지 않도록 (카드 폭 균일 유지)
+        minWidth: 0, overflowWrap: 'anywhere',
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       } as React.CSSProperties}>
         {paper.title}
       </p>
 
-      {/* 저자 (최대 1줄) */}
-      <p style={{
-        fontSize: '11px', color: '#9ca3af', margin: 0,
-        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
-        {authorsText}
-      </p>
+      {/* 제목과 초록 사이 구분선 (피그마 367:220 Divider) — 저자는 카드에 노출하지 않는다 */}
+      <div style={{ height: '1.2px', background: 'rgba(60,60,67,0.4)', width: '100%', flexShrink: 0 }} />
 
-      {/* 초록 (최대 3줄) */}
+      {/* 초록 (최대 3줄) — Pretendard Regular 12 / 행간 16 */}
       <p style={{
-        fontSize: '12px', color: '#6b7280', lineHeight: 1.6, margin: 0,
+        ...CARD_BODY, color: INK_80, margin: 0,
+        minWidth: 0, overflowWrap: 'anywhere',
         display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       } as React.CSSProperties}>
         {paper.abstract}
       </p>
 
-      {/* 분야 칩 목록 */}
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+      {/* 분야 칩 목록 — 카드 높이가 고정이라 marginTop:auto 로 아래에 붙인다 */}
+      <div style={{ display: 'flex', gap: CHIP_GAP, flexWrap: 'wrap', marginTop: 'auto' }}>
         {chips.map(chip => (
           <span key={chip} style={{
-            fontSize: '11px', fontWeight: 500, color: '#00178E',
+            fontSize: '11px', fontWeight: 500, lineHeight: '13px', color: MAIN_NAVY,
             background: 'transparent', border: '1.2px solid rgba(0,23,142,0.4)',
-            borderRadius: '20px', padding: '3px 9px',
+            borderRadius: '20px', padding: '6px 8px',
           }}>
             {chip}
           </span>

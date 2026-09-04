@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 
 /* 피그마: 소개_서비스소개 (1436:13883 / 1436:13963)
    - 탭 2개: H-AI Grad 소개 / 휴먼AI공학전공 대학원 소개
@@ -24,7 +24,7 @@ export default function About() {
       boxSizing: 'border-box',
       paddingBottom: '100px',
     }}>
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: 0 }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: 0 }}>
 
         {/* 헤더 */}
         <h1 style={pageTitle}>

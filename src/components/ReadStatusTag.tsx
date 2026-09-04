@@ -1,23 +1,34 @@
 import type { ReadStatus } from '../lib/readStatus'
 
-// 논문 카드 좌측 상단 뱃지 — 읽음 상태가 없으면 자리만 차지하고 비워둠
-export default function ReadStatusTag({ status }: { status: ReadStatus | null }) {
-  if (!status) return <span style={{ height: '24px' }} />
+/* 논문 카드 좌측 상단 뱃지.
+   showDefault=true 면 읽음 상태가 없을 때 '읽기 전' 기본 뱃지를 보여준다(논문 목록 카드).
+   기본값 false — 메인·마이페이지는 지금처럼 자리만 비워둔다. */
+export default function ReadStatusTag({
+  status, showDefault = false,
+}: {
+  status: ReadStatus | null
+  showDefault?: boolean
+}) {
+  if (!status && !showDefault) return <span style={{ height: '24px' }} />
 
-  const reading = status === 'reading' // 그 외(completed)는 '읽기 완료'
-  const color = reading ? '#00B454' : '#F59E0B'
-  const background = reading ? 'rgba(0,202,94,0.12)' : 'rgba(245,158,11,0.12)'
+  const style = status === 'reading'
+    ? { color: '#00B454', background: 'rgba(0,202,94,0.12)', label: '읽는 중' }
+    : status === 'completed'
+      ? { color: '#F59E0B', background: 'rgba(245,158,11,0.12)', label: '읽기 완료' }
+      : { color: '#3B82F6', background: 'rgba(59,130,246,0.1)', label: '읽기 전' }
 
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: '5px',
       height: '24px', padding: '0 9px',
       borderRadius: '7px',
-      background, color,
+      background: style.background, color: style.color,
       fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap',
     }}>
-      {reading ? <BookIcon color={color} /> : <CheckIcon color={color} />}
-      {reading ? '읽는 중' : '읽기 완료'}
+      {status === 'completed'
+        ? <CheckIcon color={style.color} />
+        : <BookIcon color={style.color} />}
+      {style.label}
     </span>
   )
 }

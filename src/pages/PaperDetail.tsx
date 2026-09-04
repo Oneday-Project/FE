@@ -42,6 +42,8 @@ const INK = '#3C3C43'
 const INK_80 = 'rgba(60,60,67,0.8)'
 const INK_40 = 'rgba(60,60,67,0.4)'
 const GREEN = '#00CA5E'
+const BOOKMARK_ON = 'rgba(59,130,246,0.7)'   // #3B82F6 70%
+const STAR_ON = '#FFF188'                    // 피그마 색상 스타일 'important star'
 
 export default function PaperDetail({
   paper,
@@ -267,13 +269,13 @@ export default function PaperDetail({
             <DetailCard icon={<StarIcon size={13} color="#fff" />} label="중요도">
               <div style={{ display: 'flex', gap: '1px' }}>
                 {Array.from({ length: importance }).map((_, i) => (
-                  <StarIcon key={i} size={15} color="#FBBF24" />
+                  <StarIcon key={i} size={15} color={STAR_ON} />
                 ))}
               </div>
             </DetailCard>
 
             <DetailCard icon={<TagIcon size={13} color="#fff" />} label="태그">
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {chips.length > 0
                   ? chips.map(chip => <TagPill key={chip}>{chip}</TagPill>)
                   : <span style={{ fontSize: '11px', color: INK_40 }}>태그 없음</span>}
@@ -292,6 +294,7 @@ export default function PaperDetail({
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: '2px',
           background: '#fff', borderRadius: '10px', padding: '5px',
+          height: '48px', boxSizing: 'border-box',   // 피그마 기준 세로 48
           marginBottom: '28px',
         }}>
           <ReadStatusBtn
@@ -461,8 +464,9 @@ function TagPill({ children }: { children: ReactNode }) {
     <span style={{
       border: `1px solid ${NAVY}`,
       borderRadius: '100px',
-      padding: '2px 7px',
+      padding: '6px 8px',
       fontSize: '10px',
+      lineHeight: '12px',
       fontWeight: 600,
       color: NAVY,
       whiteSpace: 'nowrap',
@@ -485,7 +489,7 @@ function ReadStatusBtn({
       onClick={onClick}
       style={{
         display: 'flex', alignItems: 'center', gap: '5px',
-        padding: '7px 12px',
+        height: '38px', padding: '0 14px',   // 바깥 48 - 패딩 10
         borderRadius: '8px', border: 'none', cursor: 'pointer',
         background: active ? 'rgba(0,202,94,0.1)' : 'transparent',
         color: active ? GREEN : INK_40,
@@ -582,7 +586,7 @@ function RelatedCard({ paper, onOpen }: { paper: Paper; onOpen: () => void }) {
         {paper.abstract}
       </p>
 
-      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         {chips.slice(0, 3).map(chip => <TagPill key={chip}>{chip}</TagPill>)}
       </div>
     </div>
@@ -592,14 +596,14 @@ function RelatedCard({ paper, onOpen }: { paper: Paper; onOpen: () => void }) {
 /* ───────── 아이콘 ───────── */
 
 function BookmarkIcon({ filled, small }: { filled: boolean; small?: boolean }) {
-  const w = small ? 11 : 15
-  const h = small ? 15 : 21
+  const w = small ? 14 : 18
+  const h = small ? 19 : 25
   return (
     <svg width={w} height={h} viewBox="0 0 22 31" fill="none">
       <path
         d="M1 3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v26l-10-7-10 7V3z"
-        fill={filled ? '#3B82F6' : 'none'}
-        stroke={filled ? '#3B82F6' : INK_40}
+        fill={filled ? BOOKMARK_ON : 'none'}
+        stroke={filled ? BOOKMARK_ON : INK_40}
         strokeWidth="2"
         strokeLinejoin="round"
       />
@@ -724,8 +728,13 @@ function toRelatedPaper(raw: unknown): Paper | null {
   }
 }
 
+/* 저자 목록 — 백엔드는 문자열 배열로 내려주지만, 예전 응답 형태({name})도 방어적으로 흡수한다.
+   (문자열 배열을 .name 으로 읽어서 전부 undefined 가 되던 게 "저자 정보 없음"의 원인이었다) */
 function getAuthorNames(paper: Paper) {
-  const authors = paper.authors?.map(author => author.name).filter(Boolean) ?? []
+  const raw = (paper.authors ?? []) as unknown[]
+  const authors = raw
+    .map(author => (typeof author === 'string' ? author : (author as { name?: string })?.name))
+    .filter((name): name is string => Boolean(name))
   if (authors.length <= 3) return authors
   return [...authors.slice(0, 3), `외 ${authors.length - 3}명`]
 }

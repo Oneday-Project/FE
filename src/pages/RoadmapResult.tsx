@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from "react-router-dom";
 import { fetchMe } from "../lib/auth";
 import { getMyRoadmap, getMajorCourses, type RoadmapAnalysis, type MajorCoursesResponse, type MajorCourse } from "../lib/roadmap";
@@ -298,7 +298,7 @@ export default function RoadmapResult() {
 
   return (
     <div style={pageBg}>
-      <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "90px" }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "90px" }}>
         {/* 헤더 */}
         <div style={{ marginBottom: HERO_GAP }}>
           <h1 style={pageTitle}>

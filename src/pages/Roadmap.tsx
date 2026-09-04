@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate, useLocation } from "react-router-dom";
 import { createRoadmap, getMyRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
 import { getToken } from "../lib/auth";
@@ -402,7 +402,7 @@ export default function Roadmap() {
 
   return (
     <div style={pageBg}>
-      <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "80px" }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "80px" }}>
         <div style={{ marginBottom: HERO_GAP }}>
           <h1 style={pageTitle}>내 로드맵, 지금 생성하기</h1>
           <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
