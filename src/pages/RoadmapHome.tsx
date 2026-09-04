@@ -6,6 +6,14 @@ import { getMyRoadmap } from '../lib/roadmap'
 
 const BRAND = '#00178E'
 
+/* 랜딩 상단의 4단계 소개 카드 */
+const STEPS = [
+  { title: '준비도 진단', desc: '관심 분야와 경험을 바탕으로 현재 준비 상태를 확인해요.' },
+  { title: '전공 로드맵', desc: '관심 분야를 바탕으로 필요한 전공 과목과 흐름을 제안해요.' },
+  { title: '논문 로드맵', desc: '관심 분야와 논문 경험을 바탕으로 중요도별 추천 논문을 확인해요.' },
+  { title: '성장 가이드', desc: '현재 준비도와 보완할 영역을 바탕으로 앞으로의 실천 방향을 제안해요.' },
+]
+
 /* 로드맵 페이지의 첫 화면(랜딩) — 큰 버튼 2개
    생성 → 빈 질문 화면 / 수정 → 저장된 답 채운 질문 화면 */
 export default function RoadmapHome() {
@@ -42,16 +50,54 @@ export default function RoadmapHome() {
         }}
       />
 
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '100px' }}>
+      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '100px', textAlign: 'center' }}>
         <h1 style={pageTitle}>
-          내 로드맵, 지금 생성하기
+          나에게 맞는 대학원 준비 로드맵
         </h1>
 
         <p style={{ ...pageSubtitle, marginBottom: HERO_GAP }}>
-          전공·논문·준비 액션을 한 플랜으로 정리해드려요.
+          현재 준비 상태를 바탕으로 전공·논문·성장 방향을 한 번에 정리해보세요!
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: 'fit-content' }}>
+        {/* 4단계 소개 카드 */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '32px',
+            flexWrap: 'nowrap',
+            marginBottom: '56px',
+          }}>
+          {STEPS.map((step, i) => (
+            <div key={step.title} style={{ flex: '1 1 0', minWidth: 0, maxWidth: '190px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  color: BRAND,
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 12px',
+                  boxShadow: '0 2px 8px rgba(15,23,42,0.12)',
+                }}>
+                {i + 1}
+              </div>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: BRAND, margin: '0 0 8px' }}>
+                {step.title}
+              </h3>
+              <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, margin: 0 }}>
+                {step.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: 'fit-content', margin: '0 auto' }}>
           {/* 생성 → 빈 질문 화면 */}
           <button
             onClick={() => navigate('/roadmap/create')}

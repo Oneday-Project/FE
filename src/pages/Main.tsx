@@ -24,9 +24,10 @@ const mockActivity: Record<number, Activity> = {
 };
 
 function MiniCalendar() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-based
+  const today = new Date();
+  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() }); // month: 0-based
+
+  const { year, month } = cursor;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay(); // 0=일
   const startOffset = (firstDay + 6) % 7; // 월요일 시작으로 보정
@@ -44,13 +45,20 @@ function MiniCalendar() {
     return "#f1f5f9";
   };
 
+  const goPrevMonth = () => setCursor(({ year: y, month: m }) => (m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }));
+  const goNextMonth = () => setCursor(({ year: y, month: m }) => (m === 11 ? { year: y + 1, month: 0 } : { year: y, month: m + 1 }));
+
   const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
   return (
     <div>
-      <p style={{ textAlign: "center", fontSize: "14px", fontWeight: 700, color: "#334155", margin: "0 0 12px" }}>
-        {year}.{String(month + 1).padStart(2, "0")}
-      </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "14px", margin: "0 0 12px" }}>
+        <MonthArrow direction="left" onClick={goPrevMonth} />
+        <p style={{ fontSize: "14px", fontWeight: 700, color: "#334155", margin: 0, minWidth: "72px", textAlign: "center" }}>
+          {year}.{String(month + 1).padStart(2, "0")}
+        </p>
+        <MonthArrow direction="right" onClick={goNextMonth} />
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
         {weekdays.map((w) => (
           <div key={w} style={{ textAlign: "center", fontSize: "10px", fontWeight: 600, color: "#94a3b8", marginBottom: "2px" }}>{w}</div>
@@ -84,6 +92,29 @@ function MiniCalendar() {
         </span>
       </div>
     </div>
+  );
+}
+
+function MonthArrow({ direction, onClick }: { direction: "left" | "right"; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={direction === "left" ? "이전 달" : "다음 달"}
+      style={{
+        width: "20px", height: "20px", flexShrink: 0,
+        background: "none", border: "none", padding: 0,
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <svg
+        width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ transform: direction === "right" ? "rotate(180deg)" : undefined }}
+      >
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+    </button>
   );
 }
 
@@ -181,14 +212,12 @@ function NavCard({
   icon,
   variant,
   onClick,
-  decoration,
 }: {
   title: string;
   subtitle: string;
   icon: React.ReactNode;
   variant: "gray" | "blue";
   onClick: () => void;
-  decoration?: boolean;
 }) {
   const blue = variant === "blue";
   return (
@@ -211,31 +240,6 @@ function NavCard({
       onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
       onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
     >
-      {/* 장식: 각 카드에 딸려있어서 호버로 카드가 움직이면 같이 움직임.
-          회색 카드 = 흰 원, z-index로 항상 앞에 옴 → 겹치는 부분은 흰색.
-          파란 카드 = 카드와 같은 색으로 붙어서 위로 뾰족 튀어나오는 돌기, z-index 없이 뒤에 있어서 흰 원에 안 가려진 끝부분만 보임 */}
-      {decoration && !blue && (
-        <div
-          aria-hidden
-          style={{
-            position: "absolute", zIndex: 2, bottom: "-40px", left: "74%",
-            transform: "translateX(-50%)",
-            width: "80px", height: "80px", borderRadius: "50%",
-            background: "#fff", boxShadow: "0 4px 14px rgba(15,23,42,0.10)",
-          }}
-        />
-      )}
-      {decoration && blue && (
-        <div
-          aria-hidden
-          style={{
-            position: "absolute", top: "-80px", left: "74%",
-            transform: "translateX(-50%)",
-            width: "50px", height: "80px", borderRadius: "25px 25px 0 0",
-            background: "#dbe4fb",
-          }}
-        />
-      )}
       <div>
         <h3 style={{ fontSize: "16px", fontWeight: 800, color: blue ? BRAND : "#1e293b", margin: "0 0 8px" }}>{title}</h3>
         <p style={{ fontSize: "12.5px", color: blue ? "#3b4a8c" : "#64748b", lineHeight: 1.5, margin: 0 }}>{subtitle}</p>
@@ -546,14 +550,12 @@ export default function Main() {
             subtitle="관심 분야별 최신 논문을 모아보고 기록을 관리하세요."
             icon={<PapersIcon />}
             onClick={() => navigate("/papers")}
-            decoration
           />
           <NavCard
             variant="blue"
             title="나에게 맞는 대학원 준비 로드맵"
             subtitle="진로 준비 상태를 확인하고, 관심 분야에 맞는 전공·과목과 논문 추천을 받아보세요."
             icon={<RoadmapIcon />}
-            decoration
             onClick={() => navigate("/roadmap")}
           />
         </div>
