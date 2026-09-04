@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import { getToken } from '../lib/auth'
 import { getMyRoadmap } from '../lib/roadmap'
@@ -42,7 +42,7 @@ export default function RoadmapHome() {
         }}
       />
 
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '100px' }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: '100px' }}>
         <h1 style={pageTitle}>
           내 로드맵, 지금 생성하기
         </h1>

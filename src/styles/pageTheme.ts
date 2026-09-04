@@ -19,6 +19,11 @@ export const PAGE_BACKGROUND =
 export const PAGE_MAX_W = '1000px'
 export const PAGE_PAD_X = '40px'
 
+/* 네비게이션 바 아래 ~ 페이지 제목까지의 간격.
+   전 페이지가 이 값을 쓰므로 여기 한 줄만 고치면 다 같이 움직인다.
+   (논문 상세는 뒤로가기 버튼이 있는 별도 구조라 이 값을 쓰지 않는다) */
+export const PAGE_TOP = '96px'
+
 export const pageContainer: CSSProperties = {
   maxWidth: PAGE_MAX_W,
   margin: '0 auto',

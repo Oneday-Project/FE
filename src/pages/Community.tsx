@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 
 /* 피그마: 커뮤니티_자유게시판_Final (1557:14288)
    - 피그마는 1440 고정(본문 1062)이라 구성·색만 가져오고 크기는 프로젝트 스케일(본문 1000)에 맞춤
@@ -115,7 +115,7 @@ export default function Community() {
       boxSizing: 'border-box',
       paddingBottom: '100px',
     }}>
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: 0 }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: 0 }}>
 
         {/* 헤더 */}
         <h1 style={pageTitle}>

@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { RadarChart } from "./RoadmapResult";
 import { calculateScores } from "./roadmapScore";
 import ReadStatusTag from "../components/ReadStatusTag";
@@ -514,7 +514,7 @@ export default function Main() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "56px" }}>
+    <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "56px" }}>
       {/* 인사말 */}
       <div style={{ marginBottom: HERO_GAP }}>
         <h1 style={pageTitle}>안녕하세요, {userName}님!</h1>

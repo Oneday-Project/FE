@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80 } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80 } from '../styles/pageTheme'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
 import ReadStatusTag from '../components/ReadStatusTag'
@@ -368,7 +368,7 @@ export default function Papers() {
       boxSizing: 'border-box',
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
     }}>
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '60px' }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: '60px' }}>
         {/* Hero 섹션 */}
         <div style={{ marginBottom: HERO_GAP }}>
           <h1 style={pageTitle}>
@@ -548,7 +548,6 @@ export default function Papers() {
               bookmarks={bookmarks}
               onBookmark={handleBookmark}
               onCardClick={handleCardClick}
-              bookmarkable={false}
             />
             {/* hasNext가 true일 때만 더보기 버튼 표시 */}
             {hasNext && (
@@ -738,7 +737,7 @@ function LoginGateModal({ onClose, onLogin }: { onClose: () => void; onLogin: ()
 
 // 논문 섹션 컴포넌트 (제목 + 카드 슬라이더)
 function PaperSection({
-  title, subtitle, papers, bookmarks, onBookmark, onCardClick, bookmarkable = true,
+  title, subtitle, papers, bookmarks, onBookmark, onCardClick,
 }: {
   title: string
   subtitle?: string
@@ -746,7 +745,6 @@ function PaperSection({
   bookmarks: Record<string, unknown>   // lib/bookmarks 스냅샷 — 키가 있으면 북마크됨
   onBookmark: (paper: Paper) => void
   onCardClick: (paper: Paper) => void
-  bookmarkable?: boolean               // false면 북마크 버튼을 숨김(휴먼AI 논문)
 }) {
   const CARDS_PER_PAGE = 3 // 한 번에 보여줄 카드 수
   const [pageIndex, setPageIndex] = useState(0)
@@ -825,7 +823,6 @@ function PaperSection({
               paper={paper}
               bookmarked={!!bookmarks[paper.arxivId]}
               onBookmark={() => onBookmark(paper)}
-              bookmarkable={bookmarkable}
               onClick={() => onCardClick(paper)}
             />
           ))}
@@ -891,13 +888,12 @@ function PaperSection({
 
 // 개별 논문 카드 컴포넌트
 function PaperCard({
-  paper, bookmarked, onBookmark, onClick, bookmarkable = true,
+  paper, bookmarked, onBookmark, onClick,
 }: {
   paper: Paper
   bookmarked: boolean
   onBookmark: () => void
   onClick: () => void
-  bookmarkable?: boolean
 }) {
   const year = paper.publishedDate?.slice(0, 4) ?? '' // 출판연도 (앞 4자리)
   const chips = paper.researchFields ?? [] // 분야 칩 전체
@@ -905,7 +901,6 @@ function PaperCard({
   // 상세 페이지에서 지정한 읽음 상태 (localStorage 공유)
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
   const readStatus = readMap[paper.arxivId]?.status ?? null
-  const authorsText = paper.authors?.slice(0, 3).map(a => a.name).join(', ') ?? '' // 저자 최대 3명
 
   return (
     <div
@@ -928,21 +923,21 @@ function PaperCard({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {/* 읽음 상태 뱃지 — 상세 페이지에서 설정한 값. 없으면 빈 자리 */}
         <ReadStatusTag status={readStatus} />
-        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지) — 휴먼AI 논문은 API 미지원이라 숨김 */}
-        {bookmarkable && (
-          <button
-            onClick={e => { e.stopPropagation(); onBookmark() }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지)
+            휴먼AI 논문도 POST /papers/hai-papers/{id}/bookmark 로 토글된다 */}
+        <button
+          onClick={e => { e.stopPropagation(); onBookmark() }}
+          aria-label={bookmarked ? '북마크 해제' : '북마크'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24"
+            fill={bookmarked ? '#3B6FE8' : 'none'}
+            stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
+            strokeWidth="2" strokeLinecap="round"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24"
-              fill={bookmarked ? '#3B6FE8' : 'none'}
-              stroke={bookmarked ? '#3B6FE8' : '#9ca3af'}
-              strokeWidth="2" strokeLinecap="round"
-            >
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-        )}
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
       </div>
 
       <span style={{ fontSize: '11px', color: '#9ca3af' }}>{year}</span>
@@ -955,13 +950,8 @@ function PaperCard({
         {paper.title}
       </p>
 
-      {/* 저자 (최대 1줄) */}
-      <p style={{
-        fontSize: '11px', color: '#9ca3af', margin: 0,
-        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
-        {authorsText}
-      </p>
+      {/* 제목과 초록 사이 구분선 (피그마 367:220 Divider) — 저자는 카드에 노출하지 않는다 */}
+      <div style={{ height: '1.2px', background: 'rgba(60,60,67,0.4)', width: '100%' }} />
 
       {/* 초록 (최대 3줄) */}
       <p style={{

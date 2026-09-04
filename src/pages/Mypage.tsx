@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
-import { pageContainer, pageTitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import { clearToken, fetchMe, getToken, type Me } from '../lib/auth'
 import ReadStatusTag from '../components/ReadStatusTag'
@@ -79,7 +79,7 @@ export default function MyPage() {
       fontFamily: "'Pretendard', 'Apple SD Gothic Neo', sans-serif",
       boxSizing: 'border-box',
     }}>
-      <div style={{ ...pageContainer, paddingTop: '72px', paddingBottom: '80px' }}>
+      <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: '80px' }}>
 
         {/* 인사말 */}
         <h1 style={{ ...pageTitle, margin: `0 0 ${HERO_GAP}` }}>
