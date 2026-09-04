@@ -1,33 +1,41 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { RadarChart } from "./RoadmapResult";
-import { calculateScores } from "./roadmapScore";
 import ReadStatusTag from "../components/ReadStatusTag";
-import { subscribeReadStatus, getReadStatusSnapshot } from "../lib/readStatus";
+import { subscribeReadStatus, getReadStatusSnapshot, getReadingCalendar, type ReadingCalendar } from "../lib/readStatus";
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from "../lib/bookmarks";
+import { getToken, fetchMe } from "../lib/auth";
+import { getMyRoadmap, type MyRoadmap, type RoadmapAnalysis } from "../lib/roadmap";
 
 const BRAND = "#00178E";
 
-/* 임시 사용자 (백엔드 연동 시 교체) */
-const userName = "wnnye";
-
 /* ── 미니 캘린더 ─────────────────────────────────────────
-   reading = 읽는 중(연한 파랑), done = 읽기 완료(진한 파랑)
-   실제로는 백엔드에서 "날짜별 활동" 받아서 activity 로 넣으면 됨 */
-type Activity = "reading" | "done";
-const mockActivity: Record<number, Activity> = {
-  3: "done", 4: "done", 5: "reading",
-  10: "done", 11: "done", 12: "reading", 13: "reading",
-  18: "reading", 19: "done", 20: "reading",
-  24: "reading", 25: "reading",
-};
-
+   reading = 읽는 중(연한 파랑), completed = 읽기 완료(진한 파랑)
+   GET /papers/reading-status/calendar?year=&month= 로 달별 조회 (비로그인이면 호출 안 함) */
 function MiniCalendar() {
   const today = new Date();
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() }); // month: 0-based
+  const [calendar, setCalendar] = useState<ReadingCalendar | null>(null);
 
   const { year, month } = cursor;
+
+  useEffect(() => {
+    if (!getToken()) return;
+    let cancelled = false;
+
+    getReadingCalendar(year, month + 1) // API는 1~12월
+      .then((res) => { if (!cancelled) setCalendar(res); })
+      .catch(() => { if (!cancelled) setCalendar(null); });
+
+    return () => { cancelled = true; };
+  }, [year, month]);
+
+  const dayStatus: Record<number, "reading" | "completed"> = {};
+  calendar?.days.forEach((d) => {
+    dayStatus[Number(d.date.slice(-2))] = d.status;
+  });
+
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay(); // 0=일
   const startOffset = (firstDay + 6) % 7; // 월요일 시작으로 보정
@@ -39,9 +47,9 @@ function MiniCalendar() {
 
   const bgFor = (day: number | null) => {
     if (!day) return "transparent";
-    const a = mockActivity[day];
-    if (a === "done") return "#7f9bec";
-    if (a === "reading") return "#d3ddf9";
+    const s = dayStatus[day];
+    if (s === "completed") return "#7f9bec";
+    if (s === "reading") return "#d3ddf9";
     return "#f1f5f9";
   };
 
@@ -74,8 +82,8 @@ function MiniCalendar() {
               alignItems: "center",
               justifyContent: "center",
               fontSize: "10px",
-              color: day && mockActivity[day] === "done" ? "#fff" : "#94a3b8",
-              fontWeight: day && mockActivity[day] ? 600 : 400,
+              color: day && dayStatus[day] === "completed" ? "#fff" : "#94a3b8",
+              fontWeight: day && dayStatus[day] ? 600 : 400,
             }}
           >
             {day ?? ""}
@@ -90,6 +98,18 @@ function MiniCalendar() {
         <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
           <span style={{ width: "10px", height: "10px", borderRadius: "3px", background: "#7f9bec" }} /> 읽기 완료
         </span>
+      </div>
+
+      {/* 월간 기록 요약 */}
+      <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "24px 0 14px" }}>월간 기록 요약</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value={`${calendar?.readingCount ?? 0}편`} />
+        <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value={`${calendar?.completedCount ?? 0}편`} />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "14px" }}>🔥🔥🔥</span>
+          <span style={{ fontSize: "14px", color: "#475569" }}>연속 기록</span>
+          <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>{calendar?.streak ?? 0}일</b>
+        </div>
       </div>
     </div>
   );
@@ -267,46 +287,35 @@ function NavCard({
 /* ── My 로드맵 요약 섹션 ──
    저장된 로드맵 답변을 기반으로 방사형+점수 요약을 보여주고,
    "자세히 보기" 누르면 결과 페이지로(저장된 답 넘겨서) 이동 */
+const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
+  { key: "preparation", label: "이해도" },
+  { key: "experience", label: "경험" },
+  { key: "paper", label: "논문 루틴" },
+  { key: "interest", label: "관심 분야" },
+  { key: "academic", label: "학업" },
+];
+
 function MyRoadmapSection() {
   const navigate = useNavigate();
+  const [myRoadmap, setMyRoadmap] = useState<MyRoadmap | null>(null);
 
-  const saved = (() => {
-    try {
-      const s = localStorage.getItem("roadmapAnswers");
-      return s ? (JSON.parse(s) as Record<string, string | string[]>) : null;
-    } catch {
-      return null;
-    }
-  })();
+  useEffect(() => {
+    if (!getToken()) return;
+    let cancelled = false;
 
-  // 아직 로드맵을 안 만든 경우 → 안내
-  if (!saved) {
-    return (
-      <section style={{ marginTop: "64px" }}>
-        <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 8px" }}>My 로드맵</h2>
-        <p style={{ fontSize: "14px", color: "#475569", margin: "0 0 20px" }}>현재 준비 상태를 확인하고, 관심 분야에 맞는 전공 과목과 논문 추천을 받아보세요.</p>
-        <div style={{ background: "#fff", borderRadius: "20px", padding: "48px", textAlign: "center", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
-          <p style={{ fontSize: "15px", color: "#64748b", margin: "0 0 18px" }}>아직 생성된 로드맵이 없어요. 지금 만들어볼까요?</p>
-          <button
-            onClick={() => navigate("/roadmap")}
-            style={{ padding: "12px 24px", background: BRAND, color: "#fff", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: 700, cursor: "pointer" }}
-          >
-            로드맵 만들러 가기
-          </button>
-        </div>
-      </section>
-    );
-  }
+    getMyRoadmap()
+      .then((res) => { if (!cancelled) setMyRoadmap(res); })
+      .catch(() => { /* 못 불러오면 섹션 자체를 숨김 */ });
 
-  const scores = calculateScores(saved);
-  const tags = Array.isArray(saved.q2) ? saved.q2 : [];
-  const axes = [
-    { label: "이해도", v: scores.prep },
-    { label: "경험", v: scores.exp },
-    { label: "논문 루틴", v: scores.paper },
-    { label: "포트폴리오", v: scores.portfolio },
-    { label: "성적", v: scores.study },
-  ];
+    return () => { cancelled = true; };
+  }, []);
+
+  // 비로그인, 또는 아직 만든 로드맵이 없으면 섹션 자체를 안 보여줌
+  if (!myRoadmap?.hasRoadmap || !myRoadmap.latest) return null;
+
+  const { result } = myRoadmap.latest;
+  const tags = result.overview.interestFields ?? [];
+  const axes = RADAR_AXES.map((a) => ({ label: a.label, v: result.radar[a.key] }));
   const strong = axes.reduce((a, b) => (b.v > a.v ? b : a));
   const weak = axes.reduce((a, b) => (b.v < a.v ? b : a));
 
@@ -318,13 +327,13 @@ function MyRoadmapSection() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "40px", flexWrap: "wrap" }}>
           <div style={{ flex: "0 0 280px", display: "flex", justifyContent: "center" }}>
-            <RadarChart values={axes.map((a) => a.v)} labels={axes.map((a) => a.label)} max={20} />
+            <RadarChart values={axes.map((a) => a.v)} labels={axes.map((a) => a.label)} max={10} />
           </div>
 
           <div style={{ flex: 1, minWidth: "280px" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "16px" }}>
               <span style={{ fontSize: "16px", color: "#475569" }}>종합 점수</span>
-              <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{scores.total}점</b>
+              <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{result.overview.totalScore}점</b>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "18px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "14px", color: "#64748b", marginRight: "2px" }}>관심 분야</span>
@@ -333,14 +342,14 @@ function MyRoadmapSection() {
               ))}
             </div>
             <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: "0 0 24px" }}>
-              현재 준비도는 <b style={{ color: BRAND }}>{scores.total}점</b>이에요.<br />
+              현재 준비도는 <b style={{ color: BRAND }}>{result.overview.totalScore}점</b>이에요.<br />
               강점은 <b>{strong.label}</b> 영역이고,<br />
               다음 단계로는 <b>{weak.label}</b>을(를) 먼저 보완하면 좋아요.
             </p>
 
             <div style={{ textAlign: "right" }}>
               <button
-                onClick={() => navigate("/roadmap-result", { state: saved })}
+                onClick={() => navigate("/roadmap-result")}
                 style={{ padding: "12px 24px", background: "#7f9bec", color: "#fff", border: "none", borderRadius: "12px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
               >
                 내 로드맵 자세히 보기 &gt;
@@ -516,12 +525,17 @@ function CarouselArrow({ direction, disabled, onClick }: { direction: "left" | "
 /* ── 메인 페이지 ── */
 export default function Main() {
   const navigate = useNavigate();
+  const [nickname, setNickname] = useState("");
+
+  useEffect(() => {
+    fetchMe().then((me) => setNickname(me?.nickname ?? ""));
+  }, []);
 
   return (
     <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "56px" }}>
       {/* 인사말 */}
       <div style={{ marginBottom: HERO_GAP }}>
-        <h1 style={pageTitle}>안녕하세요, {userName}님!</h1>
+        <h1 style={pageTitle}>안녕하세요, {nickname || "회원"}님!</h1>
         <p style={pageSubtitle}>관심 분야 논문을 읽고, 나만의 대학원 진학 로드맵을 완성해보세요.</p>
       </div>
 
@@ -530,16 +544,6 @@ export default function Main() {
         {/* 왼쪽: 캘린더 + 기록 요약 */}
         <div style={{ flex: "1 1 320px" }}>
           <MiniCalendar />
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "24px 0 14px" }}>월간 기록 요약</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value="5편" />
-            <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value="5편" />
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "14px" }}>🔥🔥🔥</span>
-              <span style={{ fontSize: "14px", color: "#475569" }}>연속 기록</span>
-              <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>6일</b>
-            </div>
-          </div>
         </div>
 
         {/* 오른쪽: 이동 카드 2개 (파란 카드 위쪽에 붙는 볼록 원 장식 — 호버 시 카드와 같이 움직임) */}
