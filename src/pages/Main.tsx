@@ -1,29 +1,40 @@
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
-import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { RadarChart } from "./RoadmapResult";
-import { getToken } from "../lib/auth";
-import { getMyRoadmap, type RoadmapAnalysis } from "../lib/roadmap";
 import ReadStatusTag from "../components/ReadStatusTag";
-import { subscribeReadStatus, getReadStatusSnapshot } from "../lib/readStatus";
+import { subscribeReadStatus, getReadStatusSnapshot, getReadingCalendar, type ReadingCalendar } from "../lib/readStatus";
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from "../lib/bookmarks";
-import {
-  fetchReadingCalendar, dateKey, EMPTY_CALENDAR, type ReadingCalendar,
-} from "../lib/readingCalendar";
+import { getToken, fetchMe } from "../lib/auth";
+import { getMyRoadmap, type MyRoadmap, type RoadmapAnalysis } from "../lib/roadmap";
 
 const BRAND = "#00178E";
 
-/* 임시 사용자 (백엔드 연동 시 교체) */
-const userName = "wnnye";
-
 /* ── 미니 캘린더 ─────────────────────────────────────────
-   reading = 읽는 중(연한 파랑), done = 읽기 완료(진한 파랑)
-   GET /papers/reading-status/calendar 로 내 날짜별 활동을 받아서 칠한다.
-   (예전에는 mockActivity 상수가 하드코딩돼 있어서 누가 가입해도 같은 날짜가 칠해져 보였다) */
-function MiniCalendar({ activity }: { activity: ReadingCalendar["days"] }) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-based
+   reading = 읽는 중(연한 파랑), completed = 읽기 완료(진한 파랑)
+   GET /papers/reading-status/calendar?year=&month= 로 달별 조회 (비로그인이면 호출 안 함) */
+function MiniCalendar() {
+  const today = new Date();
+  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() }); // month: 0-based
+  const [calendar, setCalendar] = useState<ReadingCalendar | null>(null);
+
+  const { year, month } = cursor;
+
+  useEffect(() => {
+    if (!getToken()) return;
+    let cancelled = false;
+
+    getReadingCalendar(year, month + 1) // API는 1~12월
+      .then((res) => { if (!cancelled) setCalendar(res); })
+      .catch(() => { if (!cancelled) setCalendar(null); });
+
+    return () => { cancelled = true; };
+  }, [year, month]);
+
+  const dayStatus: Record<number, "reading" | "completed"> = {};
+  calendar?.days.forEach((d) => {
+    dayStatus[Number(d.date.slice(-2))] = d.status;
+  });
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay(); // 0=일
@@ -34,24 +45,28 @@ function MiniCalendar({ activity }: { activity: ReadingCalendar["days"] }) {
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
-  const activityFor = (day: number | null) =>
-    day ? activity[dateKey(year, month, day)] : undefined;
-
   const bgFor = (day: number | null) => {
     if (!day) return "transparent";
-    const a = activityFor(day);
-    if (a === "done") return "#7f9bec";
-    if (a === "reading") return "#d3ddf9";
+    const s = dayStatus[day];
+    if (s === "completed") return "#7f9bec";
+    if (s === "reading") return "#d3ddf9";
     return "#f1f5f9";
   };
+
+  const goPrevMonth = () => setCursor(({ year: y, month: m }) => (m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }));
+  const goNextMonth = () => setCursor(({ year: y, month: m }) => (m === 11 ? { year: y + 1, month: 0 } : { year: y, month: m + 1 }));
 
   const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
   return (
     <div>
-      <p style={{ textAlign: "center", fontSize: "14px", fontWeight: 700, color: "#334155", margin: "0 0 12px" }}>
-        {year}.{String(month + 1).padStart(2, "0")}
-      </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "14px", margin: "0 0 12px" }}>
+        <MonthArrow direction="left" onClick={goPrevMonth} />
+        <p style={{ fontSize: "14px", fontWeight: 700, color: "#334155", margin: 0, minWidth: "72px", textAlign: "center" }}>
+          {year}.{String(month + 1).padStart(2, "0")}
+        </p>
+        <MonthArrow direction="right" onClick={goNextMonth} />
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
         {weekdays.map((w) => (
           <div key={w} style={{ textAlign: "center", fontSize: "10px", fontWeight: 600, color: "#94a3b8", marginBottom: "2px" }}>{w}</div>
@@ -67,8 +82,8 @@ function MiniCalendar({ activity }: { activity: ReadingCalendar["days"] }) {
               alignItems: "center",
               justifyContent: "center",
               fontSize: "10px",
-              color: activityFor(day) === "done" ? "#fff" : "#94a3b8",
-              fontWeight: activityFor(day) ? 600 : 400,
+              color: day && dayStatus[day] === "completed" ? "#fff" : "#94a3b8",
+              fontWeight: day && dayStatus[day] ? 600 : 400,
             }}
           >
             {day ?? ""}
@@ -84,7 +99,42 @@ function MiniCalendar({ activity }: { activity: ReadingCalendar["days"] }) {
           <span style={{ width: "10px", height: "10px", borderRadius: "3px", background: "#7f9bec" }} /> 읽기 완료
         </span>
       </div>
+
+      {/* 월간 기록 요약 */}
+      <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "24px 0 14px" }}>월간 기록 요약</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value={`${calendar?.readingCount ?? 0}편`} />
+        <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value={`${calendar?.completedCount ?? 0}편`} />
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "14px" }}>🔥🔥🔥</span>
+          <span style={{ fontSize: "14px", color: "#475569" }}>연속 기록</span>
+          <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>{calendar?.streak ?? 0}일</b>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function MonthArrow({ direction, onClick }: { direction: "left" | "right"; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={direction === "left" ? "이전 달" : "다음 달"}
+      style={{
+        width: "20px", height: "20px", flexShrink: 0,
+        background: "none", border: "none", padding: 0,
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <svg
+        width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ transform: direction === "right" ? "rotate(180deg)" : undefined }}
+      >
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+    </button>
   );
 }
 
@@ -182,14 +232,12 @@ function NavCard({
   icon,
   variant,
   onClick,
-  decoration,
 }: {
   title: string;
   subtitle: string;
   icon: React.ReactNode;
   variant: "gray" | "blue";
   onClick: () => void;
-  decoration?: boolean;
 }) {
   const blue = variant === "blue";
   return (
@@ -212,31 +260,6 @@ function NavCard({
       onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
       onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
     >
-      {/* 장식: 각 카드에 딸려있어서 호버로 카드가 움직이면 같이 움직임.
-          회색 카드 = 흰 원, z-index로 항상 앞에 옴 → 겹치는 부분은 흰색.
-          파란 카드 = 카드와 같은 색으로 붙어서 위로 뾰족 튀어나오는 돌기, z-index 없이 뒤에 있어서 흰 원에 안 가려진 끝부분만 보임 */}
-      {decoration && !blue && (
-        <div
-          aria-hidden
-          style={{
-            position: "absolute", zIndex: 2, bottom: "-40px", left: "74%",
-            transform: "translateX(-50%)",
-            width: "80px", height: "80px", borderRadius: "50%",
-            background: "#fff", boxShadow: "0 4px 14px rgba(15,23,42,0.10)",
-          }}
-        />
-      )}
-      {decoration && blue && (
-        <div
-          aria-hidden
-          style={{
-            position: "absolute", top: "-80px", left: "74%",
-            transform: "translateX(-50%)",
-            width: "50px", height: "80px", borderRadius: "25px 25px 0 0",
-            background: "#dbe4fb",
-          }}
-        />
-      )}
       <div>
         <h3 style={{ fontSize: "16px", fontWeight: 800, color: blue ? BRAND : "#1e293b", margin: "0 0 8px" }}>{title}</h3>
         <p style={{ fontSize: "12.5px", color: blue ? "#3b4a8c" : "#64748b", lineHeight: 1.5, margin: 0 }}>{subtitle}</p>
@@ -261,7 +284,9 @@ function NavCard({
   );
 }
 
-/* 방사형 축 — 백엔드 radar 응답 키 순서 고정. RoadmapResult.tsx 의 RADAR_AXES 와 같아야 한다. */
+/* ── My 로드맵 요약 섹션 ──
+   저장된 로드맵 답변을 기반으로 방사형+점수 요약을 보여주고,
+   "자세히 보기" 누르면 결과 페이지로(저장된 답 넘겨서) 이동 */
 const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
   { key: "preparation", label: "이해도" },
   { key: "experience", label: "경험" },
@@ -270,71 +295,27 @@ const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
   { key: "academic", label: "학업" },
 ];
 
-/* ── My 로드맵 요약 섹션 ──
-   GET /roadmap/me 로 서버에 저장된 최신 로드맵을 받아 방사형+점수 요약을 보여준다.
-   예전엔 localStorage("roadmapAnswers")를 읽었는데, 그러면
-     - 로그아웃해도 남아서 같은 브라우저의 새 계정에 이전 사람 로드맵이 보이고
-     - 로그아웃 시 지우면 같은 계정으로 다시 로그인해도 안 보인다
-   로드맵 페이지 3개(Roadmap·RoadmapHome·RoadmapResult)는 이미 서버에서 받아오므로 그쪽에 맞춘다. */
 function MyRoadmapSection() {
   const navigate = useNavigate();
+  const [myRoadmap, setMyRoadmap] = useState<MyRoadmap | null>(null);
 
-  const [analysis, setAnalysis] = useState<RoadmapAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  /* 계정이 바뀌면 다시 받아온다 (로그아웃 시엔 비운다) */
   useEffect(() => {
+    if (!getToken()) return;
     let cancelled = false;
 
-    const load = () => {
-      setAnalysis(null);
-      if (!getToken()) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      getMyRoadmap()
-        .then((mine) => {
-          if (cancelled) return;
-          setAnalysis(mine.hasRoadmap && mine.latest ? mine.latest.result : null);
-        })
-        .catch(() => { if (!cancelled) setAnalysis(null); })
-        .finally(() => { if (!cancelled) setLoading(false); });
-    };
+    getMyRoadmap()
+      .then((res) => { if (!cancelled) setMyRoadmap(res); })
+      .catch(() => { /* 못 불러오면 섹션 자체를 숨김 */ });
 
-    load();
-    window.addEventListener("auth-change", load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("auth-change", load);
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // 불러오는 중에는 "없어요" 를 깜빡이지 않게 아무것도 그리지 않는다
-  if (loading) return null;
+  // 비로그인, 또는 아직 만든 로드맵이 없으면 섹션 자체를 안 보여줌
+  if (!myRoadmap?.hasRoadmap || !myRoadmap.latest) return null;
 
-  // 아직 로드맵을 안 만든 경우 → 안내
-  if (!analysis) {
-    return (
-      <section style={{ marginTop: "64px" }}>
-        <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 8px" }}>My 로드맵</h2>
-        <p style={{ fontSize: "14px", color: "#475569", margin: "0 0 20px" }}>현재 준비 상태를 확인하고, 관심 분야에 맞는 전공 과목과 논문 추천을 받아보세요.</p>
-        <div style={{ background: "#fff", borderRadius: "20px", padding: "48px", textAlign: "center", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
-          <p style={{ fontSize: "15px", color: "#64748b", margin: "0 0 18px" }}>아직 생성된 로드맵이 없어요. 지금 만들어볼까요?</p>
-          <button
-            onClick={() => navigate("/roadmap")}
-            style={{ padding: "12px 24px", background: BRAND, color: "#fff", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: 700, cursor: "pointer" }}
-          >
-            로드맵 만들러 가기
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  const totalScore = analysis.overview.totalScore;
-  const tags = analysis.overview.interestFields ?? [];
-  const axes = RADAR_AXES.map((a) => ({ label: a.label, v: analysis.radar[a.key] }));
+  const { result } = myRoadmap.latest;
+  const tags = result.overview.interestFields ?? [];
+  const axes = RADAR_AXES.map((a) => ({ label: a.label, v: result.radar[a.key] }));
   const strong = axes.reduce((a, b) => (b.v > a.v ? b : a));
   const weak = axes.reduce((a, b) => (b.v < a.v ? b : a));
 
@@ -352,7 +333,7 @@ function MyRoadmapSection() {
           <div style={{ flex: 1, minWidth: "280px" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "16px" }}>
               <span style={{ fontSize: "16px", color: "#475569" }}>종합 점수</span>
-              <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{totalScore}점</b>
+              <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{result.overview.totalScore}점</b>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "18px", flexWrap: "wrap" }}>
               <span style={{ fontSize: "14px", color: "#64748b", marginRight: "2px" }}>관심 분야</span>
@@ -361,7 +342,7 @@ function MyRoadmapSection() {
               ))}
             </div>
             <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.7, margin: "0 0 24px" }}>
-              현재 준비도는 <b style={{ color: BRAND }}>{totalScore}점</b>이에요.<br />
+              현재 준비도는 <b style={{ color: BRAND }}>{result.overview.totalScore}점</b>이에요.<br />
               강점은 <b>{strong.label}</b> 영역이고,<br />
               다음 단계로는 <b>{weak.label}</b>을(를) 먼저 보완하면 좋아요.
             </p>
@@ -542,42 +523,19 @@ function CarouselArrow({ direction, disabled, onClick }: { direction: "left" | "
 }
 
 /* ── 메인 페이지 ── */
-/* 이번 달 읽음 기록 — 캘린더와 월간 요약이 같은 응답을 쓴다.
-   로그인 상태가 바뀌면(로그아웃·다른 계정) 이전 계정 기록이 남지 않게 비우고 다시 받아온다. */
-function useReadingCalendar(year: number, month0: number): ReadingCalendar {
-  const [calendar, setCalendar] = useState<ReadingCalendar>(EMPTY_CALENDAR);
+export default function Main() {
+  const navigate = useNavigate();
+  const [nickname, setNickname] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-
-    const load = () => {
-      setCalendar(EMPTY_CALENDAR);
-      void fetchReadingCalendar(year, month0).then(next => {
-        if (!cancelled) setCalendar(next);
-      });
-    };
-
-    load();
-    window.addEventListener("auth-change", load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("auth-change", load);
-    };
-  }, [year, month0]);
-
-  return calendar;
-}
-
-export default function Main() {
-  const today = new Date();
-  const calendar = useReadingCalendar(today.getFullYear(), today.getMonth());
-  const navigate = useNavigate();
+    fetchMe().then((me) => setNickname(me?.nickname ?? ""));
+  }, []);
 
   return (
-    <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "56px" }}>
+    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "56px" }}>
       {/* 인사말 */}
       <div style={{ marginBottom: HERO_GAP }}>
-        <h1 style={pageTitle}>안녕하세요, {userName}님!</h1>
+        <h1 style={pageTitle}>안녕하세요, {nickname || "회원"}님!</h1>
         <p style={pageSubtitle}>관심 분야 논문을 읽고, 나만의 대학원 진학 로드맵을 완성해보세요.</p>
       </div>
 
@@ -585,18 +543,7 @@ export default function Main() {
       <div style={{ background: "#fff", borderRadius: "24px", padding: "34px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)", display: "flex", gap: "32px", flexWrap: "wrap" }}>
         {/* 왼쪽: 캘린더 + 기록 요약 */}
         <div style={{ flex: "1 1 320px" }}>
-          <MiniCalendar activity={calendar.days} />
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "24px 0 14px" }}>월간 기록 요약</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <StatRow pillLabel="읽는 중" pillColor={STAT_GREEN} icon={<BookIcon color={STAT_GREEN} />} label="읽는 중" value={`${calendar.readingCount}편`} />
-            <StatRow pillLabel="읽기 완료" pillColor={STAT_ORANGE} icon={<CheckIcon color={STAT_ORANGE} />} label="완독 논문" value={`${calendar.completedCount}편`} />
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              {/* 연속 기록이 없으면 불꽃도 빼고 0일로 (갓 가입한 계정에 6일이 떠 있던 문제) */}
-              <span style={{ fontSize: "14px" }}>{"🔥".repeat(Math.min(3, calendar.streak))}</span>
-              <span style={{ fontSize: "14px", color: "#475569" }}>연속 기록</span>
-              <b style={{ marginLeft: "auto", fontSize: "16px", color: STAT_ORANGE }}>{calendar.streak}일</b>
-            </div>
-          </div>
+          <MiniCalendar />
         </div>
 
         {/* 오른쪽: 이동 카드 2개 (파란 카드 위쪽에 붙는 볼록 원 장식 — 호버 시 카드와 같이 움직임) */}
@@ -607,14 +554,12 @@ export default function Main() {
             subtitle="관심 분야별 최신 논문을 모아보고 기록을 관리하세요."
             icon={<PapersIcon />}
             onClick={() => navigate("/papers")}
-            decoration
           />
           <NavCard
             variant="blue"
             title="나에게 맞는 대학원 준비 로드맵"
             subtitle="진로 준비 상태를 확인하고, 관심 분야에 맞는 전공·과목과 논문 추천을 받아보세요."
             icon={<RoadmapIcon />}
-            decoration
             onClick={() => navigate("/roadmap")}
           />
         </div>

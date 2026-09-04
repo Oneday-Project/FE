@@ -161,19 +161,36 @@ function CourseChip({ course }: { course: MajorCourse }) {
             left: "50%",
             transform: "translateX(-50%)",
             width: "max-content",
-            maxWidth: "260px",
+            maxWidth: "320px",
             background: "#fff",
             border: "1px solid #e2e8f0",
             boxShadow: "0 8px 22px rgba(15,23,42,0.14)",
             borderRadius: "10px",
             padding: "10px 14px",
-            fontSize: "12px",
-            lineHeight: 1.5,
-            color: "#475569",
             zIndex: 30,
           }}
         >
-          {course.description}
+          <div style={{ fontSize: "12px", lineHeight: 1.7, color: "#475569" }}>
+            {course.description}{" "}
+            {course.fields.map((f) => (
+              <span
+                key={f}
+                style={{
+                  display: "inline-block",
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  padding: "2px 9px",
+                  margin: "0 2px",
+                  borderRadius: "999px",
+                  border: `1px solid ${BRAND}`,
+                  color: BRAND,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {f}
+              </span>
+            ))}
+          </div>
           {/* 말풍선 꼬리 */}
           <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderTop: "7px solid #fff", filter: "drop-shadow(0 2px 1px rgba(15,23,42,0.06))" }} />
         </div>

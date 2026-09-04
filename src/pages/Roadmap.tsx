@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate, useLocation } from "react-router-dom";
 import { createRoadmap, getMyRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
+import { getToken } from "../lib/auth";
 
 /* =========================================================
  *  대표색 (색 바꿀 땐 여기 두 줄만 수정)
@@ -108,11 +109,12 @@ function payloadToAnswers(payload: RoadmapPayload): Answers {
 /* =========================================================
  *  선택지 컴포넌트 (커스텀 스타일)
  * =======================================================*/
-function RadioOption({ name, label, selected, onSelect }: { name: string; label: string; selected: boolean; onSelect: () => void }) {
+function RadioOption({ name, label, selected, onSelect, align = "center" }: { name: string; label: string; selected: boolean; onSelect: () => void; align?: "center" | "start" }) {
+  const wrap = align === "start";
   return (
-    <label style={{ display: "flex", alignItems: "center", gap: "9px", padding: "8px 12px", borderRadius: "10px", cursor: "pointer", border: `1.5px solid ${selected ? BRAND : "transparent"}`, background: selected ? BRAND_TINT : "transparent", transition: "0.15s", whiteSpace: "nowrap" }}>
+    <label style={{ display: "flex", alignItems: wrap ? "flex-start" : "center", gap: "9px", padding: "8px 12px", borderRadius: "10px", cursor: "pointer", border: `1.5px solid ${selected ? BRAND : "transparent"}`, background: selected ? BRAND_TINT : "transparent", transition: "0.15s", whiteSpace: wrap ? "normal" : "nowrap", width: wrap ? "100%" : undefined, boxSizing: "border-box" }}>
       <input type="radio" name={name} checked={selected} onChange={onSelect} style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-      <span style={{ width: "18px", height: "18px", borderRadius: "50%", border: `2px solid ${selected ? BRAND : "#cbd5e1"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <span style={{ width: "18px", height: "18px", borderRadius: "50%", border: `2px solid ${selected ? BRAND : "#cbd5e1"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: wrap ? "1px" : 0 }}>
         {selected && <span style={{ width: "9px", height: "9px", borderRadius: "50%", background: BRAND }} />}
       </span>
       <span style={{ fontSize: "13.5px", color: selected ? BRAND : "#475569", fontWeight: selected ? 600 : 500 }}>{label}</span>
@@ -120,11 +122,12 @@ function RadioOption({ name, label, selected, onSelect }: { name: string; label:
   );
 }
 
-function CheckOption({ name, label, selected, onToggle }: { name: string; label: string; selected: boolean; onToggle: () => void }) {
+function CheckOption({ name, label, selected, onToggle, align = "center" }: { name: string; label: string; selected: boolean; onToggle: () => void; align?: "center" | "start" }) {
+  const wrap = align === "start";
   return (
-    <label style={{ display: "flex", alignItems: "center", gap: "9px", padding: "8px 12px", borderRadius: "10px", cursor: "pointer", border: `1.5px solid ${selected ? BRAND : "transparent"}`, background: selected ? BRAND_TINT : "transparent", transition: "0.15s", whiteSpace: "nowrap" }}>
+    <label style={{ display: "flex", alignItems: wrap ? "flex-start" : "center", gap: "9px", padding: "8px 12px", borderRadius: "10px", cursor: "pointer", border: `1.5px solid ${selected ? BRAND : "transparent"}`, background: selected ? BRAND_TINT : "transparent", transition: "0.15s", whiteSpace: wrap ? "normal" : "nowrap", width: wrap ? "100%" : undefined, boxSizing: "border-box" }}>
       <input type="checkbox" name={name} checked={selected} onChange={onToggle} style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
-      <span style={{ width: "18px", height: "18px", borderRadius: "5px", border: `2px solid ${selected ? BRAND : "#cbd5e1"}`, background: selected ? BRAND : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <span style={{ width: "18px", height: "18px", borderRadius: "5px", border: `2px solid ${selected ? BRAND : "#cbd5e1"}`, background: selected ? BRAND : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: wrap ? "1px" : 0 }}>
         {selected && (
           <svg width="11" height="11" viewBox="0 0 12 12">
             <path d="M2 6 L5 9 L10 3" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -180,11 +183,11 @@ function OptionsField({
   const selectedArr = (answers[q.id] as string[]) || [];
   const maxLen = Math.max(...q.options.map((o) => o.length));
 
-  const renderOpt = (opt: string) =>
+  const renderOpt = (opt: string, align: "center" | "start" = "center") =>
     q.type === "multi" ? (
-      <CheckOption key={opt} name={q.id} label={opt} selected={selectedArr.includes(opt)} onToggle={() => onMulti(q.id, opt)} />
+      <CheckOption key={opt} name={q.id} label={opt} selected={selectedArr.includes(opt)} onToggle={() => onMulti(q.id, opt)} align={align} />
     ) : (
-      <RadioOption key={opt} name={q.id} label={opt} selected={answers[q.id] === opt} onSelect={() => onSingle(q.id, opt)} />
+      <RadioOption key={opt} name={q.id} label={opt} selected={answers[q.id] === opt} onSelect={() => onSingle(q.id, opt)} align={align} />
     );
 
   // Q1: 4열 2행, 열 단위로 채워서 학기별로 묶임
@@ -201,28 +204,50 @@ function OptionsField({
           rowGap: "4px",
         }}
       >
-        {q.options.map(renderOpt)}
+        {q.options.map((opt) => renderOpt(opt))}
       </div>
     );
   }
 
-  // 긴 문장형: 3열 균등 (카드 폭 활용)
+  // 긴 문장형: 3열 균등 (카드 폭 활용) — 열 너비에 맞춰 왼쪽 정렬해서 동그라미 위치를 줄마다 맞춤
   if (maxLen > 9) {
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", columnGap: "12px", rowGap: "4px", justifyItems: "center" }}>
-        {q.options.map(renderOpt)}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", columnGap: "12px", rowGap: "4px", justifyItems: "stretch" }}>
+        {q.options.map((opt) => renderOpt(opt, "start"))}
       </div>
     );
   }
 
   // 짧은 보기: 가운데 모아 정렬
-  return <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "6px 28px" }}>{q.options.map(renderOpt)}</div>;
+  return <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "6px 28px" }}>{q.options.map((opt) => renderOpt(opt))}</div>;
+}
+
+function PreviewNotice() {
+  return (
+    <div style={{ display: "flex", borderLeft: `3px solid ${BRAND}`, padding: "2px 0 2px 16px", marginBottom: "32px" }}>
+      <div>
+        <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", fontWeight: 700, color: BRAND, margin: "0 0 6px" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9.5" />
+            <path d="M12 11v5.5M12 8v.01" />
+          </svg>
+          로드맵 생성 미리보기
+        </p>
+        <p style={{ fontSize: "13px", color: BRAND, lineHeight: 1.6, margin: 0 }}>
+          아래 질문을 통해 로드맵 생성 과정을 미리 확인해보세요.
+          <br />
+          맞춤형 로드맵 생성은 로그인 후 이용할 수 있습니다.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function Roadmap() {
   const navigate = useNavigate();
   const location = useLocation();
   const isEditMode = !!location.state?.edit;
+  const isLoggedIn = !!getToken();
 
   const [answers, setAnswers] = useState<Answers>({});
   // "수정하러 가기"로 들어오면(isEditMode) GET /roadmap/me 의 latest.answers 로 초기값을 채움
@@ -383,6 +408,8 @@ export default function Roadmap() {
           <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
           {loadError && <p style={{ fontSize: "13px", color: "#dc2626", marginTop: "8px" }}>{loadError}</p>}
         </div>
+
+        {!isLoggedIn && <PreviewNotice />}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {questions.map((q, idx) => {

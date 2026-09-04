@@ -5,6 +5,8 @@
 //   POST /papers/paper/{arxivId}/reading-status/complete    → 일반 논문 읽기 완료
 //   POST /papers/hai-papers/{id}/reading-status/reading     → 휴먼AI 논문 읽는중 토글
 //   POST /papers/hai-papers/{id}/reading-status/complete    → 휴먼AI 논문 읽기 완료
+//   GET  /papers/reading-status/calendar?year=&month=       → 메인페이지 미니 캘린더/기록 요약
+
 //
 // 논문 상세·목록·메인·마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
@@ -216,4 +218,28 @@ export function subscribeReadStatus(onChange: () => void): () => void {
 
 export function getReadStatusSnapshot(): ReadStatusMap {
   return cache
+}
+
+/* 메인페이지 미니 캘린더 — GET /papers/reading-status/calendar?year=&month=
+   응답: { year, month, days: [{ date: "YYYY-MM-DD", status: "reading"|"completed" }], readingCount, completedCount, streak }
+   readingCount/completedCount 는 조회한 달 기준이 아니라 현재 시점 전체 개수(라이브러리 총합과 동일)로 내려옴 */
+export type CalendarDay = {
+  date: string
+  status: ReadStatus
+}
+
+export type ReadingCalendar = {
+  year: number
+  month: number
+  days: CalendarDay[]
+  readingCount: number
+  completedCount: number
+  streak: number
+}
+
+// month: 1~12 (달력 UI의 0-based month 가 아니라 실제 월)
+export async function getReadingCalendar(year: number, month: number): Promise<ReadingCalendar> {
+  const res = await fetch(`/api/papers/reading-status/calendar?year=${year}&month=${month}`, { headers: authHeaders() })
+  if (!res.ok) throw new Error(String(res.status))
+  return res.json()
 }
