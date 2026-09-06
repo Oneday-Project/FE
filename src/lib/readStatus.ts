@@ -5,6 +5,14 @@
 //   POST /papers/paper/{arxivId}/reading-status/complete    → 일반 논문 읽기 완료
 //   POST /papers/hai-papers/{id}/reading-status/reading     → 휴먼AI 논문 읽는중 토글
 //   POST /papers/hai-papers/{id}/reading-status/complete    → 휴먼AI 논문 읽기 완료
+//
+// ⚠️ 서버가 단계를 강제한다 (실측한 응답 기준)
+//      /reading   읽기 전 ↔ 읽는 중 토글. 이미 '읽기 완료'면 409
+//                 {"message":"이미 읽기 완료된 논문입니다."}
+//      /complete  읽는 중 → 읽기 완료. '읽는 중'이 아니면 404
+//                 {"message":"읽는 중인 논문이 아닙니다. 먼저 읽는 중으로 표시해주세요."}
+//      완료를 되돌리는 엔드포인트는 없음 (DELETE·/none·/clear 전부 404)
+//    → '읽기 전 → 읽기 완료' 처럼 한 번에 못 가는 전환은 중간 단계를 거쳐 두 번 호출한다.
 //   GET  /papers/reading-status/calendar?year=&month=       → 메인페이지 미니 캘린더/기록 요약
 
 //
@@ -103,35 +111,39 @@ async function fetchLibrary(type: 'reading' | 'completed'): Promise<LibraryItem[
   return all
 }
 
+/* 서버의 읽음 목록을 다시 읽어 캐시를 서버 값으로 맞춘다.
+   읽는중 엔드포인트가 '토글'이라 클릭 결과를 화면에서 단정할 수 없어서,
+   쓰기 후에는 반드시 이걸로 되맞춘다. 실패하면 기존 값을 그대로 둔다. */
+async function syncFromServer(): Promise<void> {
+  if (!getToken()) return
+
+  const gen = generation
+  try {
+    // 읽는 중 + 다 읽은 논문을 모두 불러와 하나의 map 으로
+    const [reading, completed] = await Promise.all([
+      fetchLibrary('reading'),
+      fetchLibrary('completed'),
+    ])
+
+    if (gen !== generation) return   // 그 사이 계정이 바뀜 → 버린다
+
+    const next: ReadStatusMap = {}
+    for (const item of [...reading, ...completed]) {
+      const entry = toEntry(item)
+      if (entry) next[entry.paper.arxivId] = entry
+    }
+
+    loaded = true
+    emit(next)
+  } catch {
+    // 실패 시 다음 구독에서 다시 시도
+  }
+}
+
 // 최초 구독 시 한 번 서버에서 불러옴 (비로그인이면 건너뜀)
 function ensureLoaded(): void {
   if (loaded || loading || !getToken()) return
-
-  const gen = generation
-  loading = (async () => {
-    try {
-      // 읽는 중 + 다 읽은 논문을 모두 불러와 하나의 map 으로
-      const [reading, completed] = await Promise.all([
-        fetchLibrary('reading'),
-        fetchLibrary('completed'),
-      ])
-
-      if (gen !== generation) return   // 그 사이 계정이 바뀜 → 버린다
-
-      const next: ReadStatusMap = {}
-      for (const item of [...reading, ...completed]) {
-        const entry = toEntry(item)
-        if (entry) next[entry.paper.arxivId] = entry
-      }
-
-      loaded = true
-      emit(next)
-    } catch {
-      // 실패 시 다음 구독에서 다시 시도
-    } finally {
-      if (gen === generation) loading = null
-    }
-  })()
+  loading = syncFromServer().finally(() => { loading = null })
 }
 
 /* 로그인/로그아웃/계정 전환 시 이전 사용자의 읽음 기록이 화면에 남지 않게 비운다.
@@ -163,42 +175,57 @@ export async function setReadStatus(paper: SavedPaper, next: ReadStatus | null):
 
   const before = cache
   const current = cache[paper.arxivId]?.status ?? null
-  const optimistic = { ...cache }
+  if (current === next) return
 
-  /* 휴먼AI 논문은 arxivId가 "hai-{id}" 로 인코딩돼 있어 base 경로가 다르다.
-     suffix 는 둘 다 같음 — 읽는중 /reading, 완료 /complete.
-     (이전엔 휴먼AI만 suffix 없이 호출해서 404 → 낙관적 업데이트가 매번 롤백됐다) */
+  /* 휴먼AI 논문은 arxivId가 "hai-{id}" 로 인코딩돼 있어 base 경로가 다르다. */
   const isHai = paper.arxivId.startsWith('hai-')
   const base = isHai
     ? `/api/papers/hai-papers/${encodeURIComponent(paper.arxivId.slice(4))}/reading-status`
     : `/api/papers/paper/${encodeURIComponent(paper.arxivId)}/reading-status`
   const readingUrl = `${base}/reading`
+  const completeUrl = `${base}/complete`
 
-  let url: string
-
-  if (next === null) {
-    // 해제: 읽는중 토글 엔드포인트로 취소
-    delete optimistic[paper.arxivId]
-    url = readingUrl
-  } else if (next === 'completed') {
-    optimistic[paper.arxivId] = { status: 'completed', savedAt: new Date().toISOString(), paper }
-    url = `${base}/complete`
-  } else {
-    // 'reading' — 이미 reading이면 토글로 꺼짐
-    if (current === 'reading') delete optimistic[paper.arxivId]
-    else optimistic[paper.arxivId] = { status: 'reading', savedAt: new Date().toISOString(), paper }
-    url = readingUrl
-  }
+  const optimistic = { ...cache }
+  if (next === null) delete optimistic[paper.arxivId]
+  else optimistic[paper.arxivId] = { status: next, savedAt: new Date().toISOString(), paper }
 
   const gen = generation
-  emit(optimistic)
+  emit(optimistic)   // 먼저 화면을 바꿔 반응이 즉각 보이게
+
+  const post = async (target: string) => {
+    const res = await fetch(target, { method: 'POST', headers: authHeaders() })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`${res.status} ${body}`)
+    }
+  }
 
   try {
-    const res = await fetch(url, { method: 'POST', headers: authHeaders() })
-    if (!res.ok) throw new Error(String(res.status))
-  } catch {
-    // 그 사이 계정이 바뀌었으면 이전 계정 데이터를 되살리면 안 된다
+    /* 서버가 허용하는 전환만 골라서, 필요하면 중간 단계를 거친다.
+         읽기 전  → 읽는 중    : /reading
+         읽는 중  → 읽기 전    : /reading (토글)
+         읽는 중  → 읽기 완료  : /complete
+         읽기 전  → 읽기 완료  : /reading 후 /complete  (바로 부르면 404)
+         읽기 완료 → 무엇이든  : 불가 (해제 API 없음) */
+    if (current === 'completed') {
+      throw new Error('읽기 완료한 논문은 되돌릴 수 없습니다. (서버에 해제 API 없음)')
+    }
+
+    if (next === 'completed') {
+      if (current !== 'reading') await post(readingUrl)   // 먼저 읽는 중으로
+      await post(completeUrl)
+    } else if (next === 'reading') {
+      await post(readingUrl)
+    } else {
+      // 읽기 전 — 읽는 중일 때만 토글로 끈다
+      if (current === 'reading') await post(readingUrl)
+    }
+
+    await syncFromServer()
+  } catch (e) {
+    // 실패하면 화면을 원래대로 (계정이 바뀐 뒤라면 이전 데이터를 되살리지 않는다)
     if (gen === generation) emit(before)
+    console.error('읽음 상태 변경 실패:', paper.arxivId, current, '→', next, e)
   }
 }
 

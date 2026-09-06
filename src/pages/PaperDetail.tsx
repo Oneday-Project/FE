@@ -1,8 +1,12 @@
-import { useState, useEffect, useMemo, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { pageContainer } from '../styles/pageTheme'
+import { useState, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import { pageContainer, READ_STATUS_STYLE, MAIN } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import type { Paper } from './Papers'
 import { getToken } from '../lib/auth'
+import PaperCard from '../components/PaperCard'
+import bookCloseIcon from '../components/akar-icons_book-close.png'
+import bookOpenIcon from '../components/akar-icons_book.png'
+import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from '../lib/bookmarks'
 import {
   setReadStatus,
   subscribeReadStatus,
@@ -36,12 +40,10 @@ type AiContent = {
    단, 피그마는 1440px 고정 기준이라 수치를 그대로 쓰면 화면에서 과하게 커 보여서
    타이포/여백은 기존 프로젝트 스케일(컨테이너 860, 본문 14px)을 유지함. */
 
-const NAVY = '#00178E'
 const NAVY_60 = 'rgba(0,23,142,0.6)'
 const INK = '#3C3C43'
 const INK_80 = 'rgba(60,60,67,0.8)'
 const INK_40 = 'rgba(60,60,67,0.4)'
-const GREEN = '#00CA5E'
 const BOOKMARK_ON = 'rgba(59,130,246,0.7)'   // #3B82F6 70%
 const STAR_ON = '#FFF188'                    // 피그마 색상 스타일 'important star'
 
@@ -54,13 +56,28 @@ export default function PaperDetail({
   allPapers: Paper[]
   onBack: () => void
 }) {
-  const [bookmarked, setBookmarked] = useState(paper.bookmarkCount > 0)
+  /* 북마크는 lib/bookmarks 한 곳에서 관리 — 목록 카드·마이페이지와 같은 상태를 본다.
+     (예전엔 화면 안에서만 바뀌는 로컬 state 라 새로고침하면 풀렸다) */
+  const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarksSnapshot)
+  const bookmarked = !!bookmarks[paper.arxivId]
+  const toggleBookmarkFor = (target: Paper) => {
+    void toggleBookmark({
+      arxivId: target.arxivId,
+      title: target.title,
+      publishedDate: target.publishedDate,
+      abstract: target.abstract,
+      fields: getFieldNames(target),
+    })
+  }
   /* 읽는 중 / 읽기 완료 — 하나만, 다시 누르면 해제.
      localStorage에 저장돼서 논문 목록 카드 뱃지·마이페이지 탭에 함께 반영됨. */
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
   const readStatus = readMap[paper.arxivId]?.status ?? null
 
-  const toggleReadStatus = (next: ReadStatus) => {
+  /* 읽기 전 / 읽는 중 / 읽기 완료 중 하나를 직접 고른다.
+     '읽기 전' 은 상태 없음(null) — 예전처럼 같은 걸 다시 눌러 해제하는 방식이 아니다. */
+  const setReadStatusTo = (next: ReadStatus | null) => {
+    if (readStatus === next) return
     setReadStatus(
       {
         arxivId: paper.arxivId,
@@ -69,9 +86,12 @@ export default function PaperDetail({
         abstract: paper.abstract,
         fields: getFieldNames(paper),
       },
-      readStatus === next ? null : next,
+      next,
     )
   }
+  // 읽기 완료는 서버에서 되돌릴 수 없어서 누르기 전에 한 번 확인받는다
+  const [confirmComplete, setConfirmComplete] = useState(false)
+  const isCompleted = readStatus === 'completed'
   const [ai, setAi] = useState<AiContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [aiFailed, setAiFailed] = useState<'none' | 'unauthorized' | 'missing'>('none')
@@ -87,19 +107,41 @@ export default function PaperDetail({
   const doiText = paper.doi || paper.arxivId || '-'
   const importance = clampStarTier(paper.starTier)
 
-  /* 함께 보면 좋은 논문 — GET /papers/paper/{arxivId}/similar (추천).
-     실패하거나 비었으면 목록(allPapers)에서 같은 분야 위주로 대체. */
+  /* 함께 보면 좋은 논문 — 같은 분야를 먼저 보여준다.
+     추천 API(/similar)는 title·pdfUrl 정도만 내려줘서 카드에 필요한 초록·분야·연도가 없다.
+     그래서 추천 결과는 '순서 힌트'로만 쓰고, 카드에 채울 내용은 목록(allPapers)에서 가져온다. */
   const related = useMemo(() => {
-    if (similar.length > 0) return similar
-    return allPapers.filter(p => p.arxivId !== paper.arxivId)
-  }, [similar, allPapers, paper.arxivId])
+    const others = allPapers.filter(p => p.arxivId !== paper.arxivId)
+    const byId = new Map(others.map(p => [p.arxivId, p]))
+    const myFields = new Set(getFieldNames(paper))
+    const overlap = (p: Paper) => getFieldNames(p).filter(f => myFields.has(f)).length
+
+    // 추천 API 결과 중 목록에 있는 것 (내용이 채워지는 것만)
+    const recommended = similar
+      .map(sp => byId.get(sp.arxivId))
+      .filter((p): p is Paper => !!p)
+
+    // 분야가 겹치는 논문 — 많이 겹치는 순
+    const sameField = others
+      .filter(p => overlap(p) > 0)
+      .sort((a, b) => overlap(b) - overlap(a))
+
+    // 추천 → 같은 분야 → 나머지 순으로 중복 없이 이어붙인다
+    const seen = new Set<string>()
+    const ordered: Paper[] = []
+    for (const p of [...recommended, ...sameField, ...others]) {
+      if (seen.has(p.arxivId)) continue
+      seen.add(p.arxivId)
+      ordered.push(p)
+    }
+    return ordered
+  }, [similar, allPapers, paper])
   const relatedPageCount = Math.max(1, Math.ceil(related.length / 3))
   const relatedPapers = related.slice(relatedPage * 3, relatedPage * 3 + 3)
 
   useEffect(() => {
-    setBookmarked(paper.bookmarkCount > 0)
     setRelatedPage(0)
-  }, [paper.arxivId, paper.bookmarkCount])
+  }, [paper.arxivId])
 
   // 함께 보면 좋은 논문 — 유사 논문 추천 API
   useEffect(() => {
@@ -220,115 +262,138 @@ export default function PaperDetail({
 
       <div style={{ ...pageContainer, paddingTop: '12px', paddingBottom: '64px' }}>
 
-        {/* ── 헤더: 제목·저자(왼쪽) + 상세 카드 3개(오른쪽) ── */}
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '18px' }}>
-
-          {/* Left */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{
-              fontSize: '22px', fontWeight: 600, color: INK,
-              lineHeight: 1.4, margin: '0 0 18px',
-            }}>
-              {paper.title}
-            </h1>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', fontWeight: 500, marginBottom: '18px' }}>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <span style={{ color: INK }}>발행연도</span>
-                <span style={{ color: INK_80 }}>{year}</span>
-              </div>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ color: INK, flexShrink: 0 }}>저자</span>
-                {authors.length > 0
-                  ? authors.map((name, i) => <span key={`${name}-${i}`} style={{ color: INK_80 }}>{name}</span>)
-                  : <span style={{ color: INK_80 }}>저자 정보 없음</span>}
-              </div>
+        {/* ── 상단 메타 배지 — 중요도 / 태그 / DOI 를 가로 한 줄로 ── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '28px',
+          flexWrap: 'wrap', marginBottom: '26px',
+        }}>
+          <MetaBadge icon={<StarIcon size={12} color="#fff" />} label="중요도">
+            <div style={{ display: 'flex', gap: '2px' }}>
+              {Array.from({ length: importance }).map((_, i) => (
+                <StarIcon key={i} size={14} color={STAR_ON} />
+              ))}
             </div>
+          </MetaBadge>
 
-            {/* 북마크 / 원문 링크 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <button
-                onClick={() => setBookmarked(b => !b)}
-                aria-label="북마크"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
-              >
-                <BookmarkIcon filled={bookmarked} />
-              </button>
-              <button
-                onClick={() => { if (paper.pdfUrl) window.open(paper.pdfUrl, '_blank') }}
-                aria-label="원문 링크"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
-              >
-                <LinkIcon />
-              </button>
+          <MetaBadge icon={<TagIcon size={12} color="#fff" />} label="태그">
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {chips.length > 0
+                ? chips.map(chip => <TagPill key={chip}>{chip}</TagPill>)
+                : <span style={{ fontSize: '11px', color: INK_40 }}>태그 없음</span>}
             </div>
-          </div>
+          </MetaBadge>
 
-          {/* Right: 중요도 / 태그 / DOI */}
-          <div style={{ width: '250px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <DetailCard icon={<StarIcon size={13} color="#fff" />} label="중요도">
-              <div style={{ display: 'flex', gap: '1px' }}>
-                {Array.from({ length: importance }).map((_, i) => (
-                  <StarIcon key={i} size={15} color={STAR_ON} />
-                ))}
-              </div>
-            </DetailCard>
+          <MetaBadge icon={<HashIcon size={12} color="#fff" />} label="DOI">
+            <span style={{ fontSize: '11px', fontWeight: 500, color: INK, wordBreak: 'break-all' }}>
+              {doiText}
+            </span>
+          </MetaBadge>
+        </div>
 
-            <DetailCard icon={<TagIcon size={13} color="#fff" />} label="태그">
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {chips.length > 0
-                  ? chips.map(chip => <TagPill key={chip}>{chip}</TagPill>)
-                  : <span style={{ fontSize: '11px', color: INK_40 }}>태그 없음</span>}
-              </div>
-            </DetailCard>
+        {/* ── 제목(왼쪽) + 발행연도·저자(오른쪽) ── */}
+        <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start', marginBottom: '22px' }}>
+          <h1 style={{
+            flex: 1, minWidth: 0,
+            fontSize: '20px', fontWeight: 600, color: INK,
+            lineHeight: 1.45, margin: 0,
+          }}>
+            {paper.title}
+          </h1>
 
-            <DetailCard icon={<HashIcon size={13} color="#fff" />} label="DOI">
-              <span style={{ fontSize: '10px', fontWeight: 500, color: INK, wordBreak: 'break-all', textAlign: 'right' }}>
-                {doiText}
+          <div style={{
+            flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px',
+            fontSize: '12px', fontWeight: 500, textAlign: 'right',
+          }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <span style={{ color: INK }}>발행연도</span>
+              <span style={{ color: INK_80 }}>{year}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <span style={{ color: INK, flexShrink: 0 }}>저자</span>
+              <span style={{ color: INK_80 }}>
+                {authors.length > 0 ? authors.join(' ') : '저자 정보 없음'}
               </span>
-            </DetailCard>
+            </div>
           </div>
         </div>
 
-        {/* 읽는 중 / 읽기 완료 — 하나만 선택 (다시 누르면 해제) */}
+        {/* ── 읽음 상태 3분할(왼쪽) + 북마크·원문(오른쪽) ── */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '2px',
-          background: '#fff', borderRadius: '10px', padding: '5px',
-          height: '48px', boxSizing: 'border-box',   // 피그마 기준 세로 48
-          marginBottom: '28px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '16px', marginBottom: '30px',
         }}>
-          <ReadStatusBtn
-            active={readStatus === 'reading'}
-            onClick={() => toggleReadStatus('reading')}
-            icon={<BookIcon size={15} color={readStatus === 'reading' ? GREEN : INK_40} />}
-          >
-            읽는 중
-          </ReadStatusBtn>
-          <ReadStatusBtn
-            active={readStatus === 'completed'}
-            onClick={() => toggleReadStatus('completed')}
-            icon={<CheckCircleIcon size={15} color={readStatus === 'completed' ? GREEN : INK_40} />}
-          >
-            읽기 완료
-          </ReadStatusBtn>
+          {/* 읽기 전 / 읽는 중 / 읽기 완료 — '읽기 전' 이 상태 없음(null) */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '2px',
+            background: '#fff', borderRadius: '10px', padding: '5px',
+            height: '48px', boxSizing: 'border-box',   // 피그마 기준 세로 48
+          }}>
+            {/* 읽기 완료가 되면 서버가 되돌리기를 막아서(409) 나머지 둘은 잠근다 */}
+            <ReadStatusBtn
+              active={readStatus === null}
+              tone={READ_STATUS_STYLE.none}
+              disabled={isCompleted}
+              onClick={() => setReadStatusTo(null)}
+              icon={<StatusIcon src={bookCloseIcon} active={readStatus === null} />}
+            >
+              읽기 전
+            </ReadStatusBtn>
+            <ReadStatusBtn
+              active={readStatus === 'reading'}
+              tone={READ_STATUS_STYLE.reading}
+              disabled={isCompleted}
+              onClick={() => setReadStatusTo('reading')}
+              icon={<StatusIcon src={bookOpenIcon} active={readStatus === 'reading'} />}
+            >
+              읽는 중
+            </ReadStatusBtn>
+            <ReadStatusBtn
+              active={isCompleted}
+              tone={READ_STATUS_STYLE.completed}
+              onClick={() => { if (!isCompleted) setConfirmComplete(true) }}
+              icon={<CheckCircleIcon size={15} color={isCompleted ? READ_STATUS_STYLE.completed.color : INK_40} />}
+            >
+              읽기 완료
+            </ReadStatusBtn>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+            <button
+              onClick={() => toggleBookmarkFor(paper)}
+              aria-label={bookmarked ? '북마크 해제' : '북마크'}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
+            >
+              <BookmarkIcon filled={bookmarked} />
+            </button>
+            <button
+              onClick={() => { if (paper.pdfUrl) window.open(paper.pdfUrl, '_blank') }}
+              aria-label="원문 링크"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}
+            >
+              <LinkIcon />
+            </button>
+          </div>
         </div>
 
         {/* ── 본문 카드 3종 ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
 
-          {/* 이 논문을 왜 읽어야 할까요? */}
-          <Card>
-            <div style={{ marginBottom: '16px' }}>
-              <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY, margin: '0 0 6px' }}>
-                이 논문을 왜 읽어야 할까요?
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <AiIcon size={13} color={NAVY_60} />
-                <p style={{ fontSize: '11px', fontWeight: 500, color: NAVY_60, margin: 0 }}>
+          {/* 이 논문을 왜 읽어야 할까요? — 탭 안에 AI 안내 알약을 함께 둔다 */}
+          <TabbedCard
+            label={<TabLabel>이 논문을 왜 읽어야 할까요?</TabLabel>}
+            note={
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                background: 'rgba(0,23,142,0.06)', borderRadius: '100px',
+                padding: '5px 10px',
+              }}>
+                <AiIcon size={11} color={NAVY_60} />
+                <span style={{ fontSize: '10px', fontWeight: 500, color: NAVY_60, whiteSpace: 'nowrap' }}>
                   관심 분야를 바탕으로 AI가 추천 이유를 정리했어요.
-                </p>
-              </div>
-            </div>
+                </span>
+              </span>
+            }
+          >
             <Body>{loading ? <Skeleton /> : ai?.whyRead}</Body>
             {aiFailed !== 'none' && (
               <p style={{ fontSize: '11px', color: INK_40, margin: '12px 0 0' }}>
@@ -337,11 +402,10 @@ export default function PaperDetail({
                   : '아직 AI 요약이 생성되지 않은 논문이에요. (현재는 원문 기반 임시 문구)'}
               </p>
             )}
-          </Card>
+          </TabbedCard>
 
           {/* Abstract */}
-          <Card>
-            <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY_60, margin: '0 0 18px' }}>Abstract</p>
+          <TabbedCard label={<TabLabel>Abstract</TabLabel>}>
             <LabeledBlock label="EN">
               {paper.abstract || 'Abstract 정보가 없습니다.'}
             </LabeledBlock>
@@ -349,14 +413,17 @@ export default function PaperDetail({
             <LabeledBlock label="KO">
               {loading ? <Skeleton /> : ai?.abstractKor}
             </LabeledBlock>
-          </Card>
+          </TabbedCard>
 
           {/* Key Takeaways */}
-          <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '18px' }}>
-              <AiIcon size={13} color={NAVY_60} />
-              <p style={{ fontSize: '15px', fontWeight: 600, color: NAVY_60, margin: 0 }}>Key Takeaways</p>
-            </div>
+          <TabbedCard
+            label={
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <AiIcon size={12} color={MAIN} />
+                <TabLabel>Key Takeaways</TabLabel>
+              </span>
+            }
+          >
             {(['what', 'how', 'impact'] as const).map((key, idx) => (
               <div key={key}>
                 {idx > 0 && <Divider />}
@@ -365,8 +432,19 @@ export default function PaperDetail({
                 </LabeledBlock>
               </div>
             ))}
-          </Card>
+          </TabbedCard>
         </div>
+
+        {/* 읽기 완료 확인 — 되돌릴 수 없는 동작이라 한 번 물어본다 */}
+        {confirmComplete && (
+          <ConfirmCompleteModal
+            onClose={() => setConfirmComplete(false)}
+            onConfirm={() => {
+              setConfirmComplete(false)
+              setReadStatusTo('completed')
+            }}
+          />
+        )}
 
         {/* ── 함께 보면 좋은 논문 ── */}
         <div style={{ marginTop: '48px' }}>
@@ -381,9 +459,15 @@ export default function PaperDetail({
               disabled={relatedPage === 0}
               onClick={() => setRelatedPage(p => Math.max(0, p - 1))}
             />
-            <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '20px' }}>
               {relatedPapers.map(rp => (
-                <RelatedCard key={rp.arxivId} paper={rp} onOpen={() => openPaper(rp.arxivId)} />
+                <PaperCard
+                  key={rp.arxivId}
+                  paper={rp}
+                  bookmarked={!!bookmarks[rp.arxivId]}
+                  onBookmark={() => toggleBookmarkFor(rp)}
+                  onClick={() => openPaper(rp.arxivId)}
+                />
               ))}
             </div>
             <CarouselArrow
@@ -423,7 +507,7 @@ function Body({ children }: { children: ReactNode }) {
 function LabeledBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: '12px', fontWeight: 600, color: NAVY, marginBottom: '8px' }}>{label}</div>
+      <div style={{ fontSize: '12px', fontWeight: 600, color: MAIN, marginBottom: '8px' }}>{label}</div>
       <Body>{children}</Body>
     </div>
   )
@@ -433,42 +517,65 @@ function Divider() {
   return <div style={{ height: '1px', background: '#E3E8F5', margin: '18px 0' }} />
 }
 
-function DetailCard({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+/* 상단 메타 배지 — 원형 아이콘 + 라벨 + 내용을 한 줄로. 배경 없이 페이지 위에 얹힌다. */
+function MetaBadge({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
-    <div style={{
-      background: '#fff',
-      borderRadius: '14px',
-      padding: '10px 14px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      minHeight: '44px',
-    }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
       <span style={{
-        width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
+        width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
         background: 'linear-gradient(90deg, #4C96FF 0%, #A8B4FF 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {icon}
       </span>
-      <span style={{ fontSize: '11px', fontWeight: 600, color: INK_80, flexShrink: 0 }}>{label}</span>
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', minWidth: 0 }}>
+      <span style={{ fontSize: '12px', fontWeight: 600, color: INK_80, flexShrink: 0 }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {children}
       </div>
     </div>
   )
 }
 
+/* 카드 위에 얹히는 탭 형태 라벨 + 흰 카드 */
+function TabbedCard({ label, note, children }: { label: ReactNode; note?: ReactNode; children: ReactNode }) {
+  return (
+    <div>
+      <div style={{
+        position: 'relative', zIndex: 1,
+        display: 'inline-flex', alignItems: 'center', gap: '10px',
+        marginLeft: '22px', padding: '11px 20px 12px',
+        background: '#fff', borderRadius: '14px 14px 0 0',
+      }}>
+        {label}
+        {note}
+      </div>
+      {/* -1px 로 탭과 카드 사이 헤어라인을 없앤다 */}
+      <div style={{ marginTop: '-1px' }}>
+        <Card>{children}</Card>
+      </div>
+    </div>
+  )
+}
+
+// 탭 라벨 텍스트 (Abstract / Key Takeaways / 왜 읽어야 할까요)
+function TabLabel({ children }: { children: ReactNode }) {
+  return (
+    <span style={{ fontSize: '14px', fontWeight: 600, color: MAIN, whiteSpace: 'nowrap' }}>
+      {children}
+    </span>
+  )
+}
+
 function TagPill({ children }: { children: ReactNode }) {
   return (
     <span style={{
-      border: `1px solid ${NAVY}`,
+      border: `1px solid ${MAIN}`,
       borderRadius: '100px',
       padding: '6px 8px',
       fontSize: '10px',
       lineHeight: '12px',
       fontWeight: 600,
-      color: NAVY,
+      color: MAIN,
       whiteSpace: 'nowrap',
     }}>
       {children}
@@ -477,24 +584,30 @@ function TagPill({ children }: { children: ReactNode }) {
 }
 
 function ReadStatusBtn({
-  active, onClick, children, icon,
+  active, onClick, children, icon, tone, disabled = false,
 }: {
   active: boolean
   onClick: () => void
   children: ReactNode
   icon: ReactNode
+  tone: { color: string; background: string }   // 상태별 색 (목록 카드 뱃지와 동일)
+  disabled?: boolean
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
+      title={disabled ? '읽기 완료한 논문은 이전 상태로 되돌릴 수 없어요.' : undefined}
       style={{
         display: 'flex', alignItems: 'center', gap: '5px',
         height: '38px', padding: '0 14px',   // 바깥 48 - 패딩 10
-        borderRadius: '8px', border: 'none', cursor: 'pointer',
-        background: active ? 'rgba(0,202,94,0.1)' : 'transparent',
-        color: active ? GREEN : INK_40,
+        borderRadius: '8px', border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        background: active ? tone.background : 'transparent',
+        color: active ? tone.color : INK_40,
         fontSize: '12px', fontWeight: 500, fontFamily: 'inherit',
-        transition: 'background 0.15s, color 0.15s',
+        transition: 'background 0.15s, color 0.15s, opacity 0.15s',
       }}
     >
       {icon}
@@ -545,49 +658,95 @@ function Skeleton() {
   )
 }
 
-function RelatedCard({ paper, onOpen }: { paper: Paper; onOpen: () => void }) {
-  const year = getYear(paper.publishedDate)
-  const chips = getFieldNames(paper)
-
+/* 읽기 완료 확인 모달 — 서버에 완료 해제 API 가 없어서 되돌릴 수 없다.
+   스타일은 논문 목록의 로그인 안내 모달과 같은 톤. */
+function ConfirmCompleteModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void }) {
   return (
     <div
-      onClick={onOpen}
+      onClick={onClose}
       style={{
-        background: '#fff',
-        borderRadius: '14px',
-        padding: '14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        cursor: 'pointer',
-        transition: 'box-shadow 0.2s',
+        position: 'fixed', inset: 0,
+        background: 'rgba(71, 78, 94, 0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000,
       }}
-      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,23,142,0.1)' }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '11px', color: INK }}>{year}</span>
-        <BookmarkIcon filled={paper.bookmarkCount > 0} small />
-      </div>
+      <div
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'relative',
+          width: '380px', maxWidth: '90%',
+          background: '#fff', borderRadius: '16px',
+          padding: '44px 40px 34px',
+          boxSizing: 'border-box',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+        }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="닫기"
+          style={{
+            position: 'absolute', top: '12px', right: '12px',
+            width: '26px', height: '26px',
+            border: 'none', background: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2" strokeLinecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
 
-      <p style={{
-        fontSize: '12px', fontWeight: 500, color: INK, margin: 0, lineHeight: 1.5,
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as CSSProperties}>
-        {paper.title}
-      </p>
+        <span style={{
+          width: '52px', height: '52px', borderRadius: '50%',
+          background: READ_STATUS_STYLE.completed.background,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: '20px',
+        }}>
+          <CheckCircleIcon size={26} color={READ_STATUS_STYLE.completed.color} />
+        </span>
 
-      <div style={{ height: '1px', background: INK_40, opacity: 0.5 }} />
+        <p style={{
+          fontSize: '16px', fontWeight: 600, color: INK,
+          margin: '0 0 10px', textAlign: 'center',
+        }}>
+          읽기 완료로 표시할까요?
+        </p>
+        <p style={{
+          fontSize: '13px', fontWeight: 400, color: INK_80,
+          margin: '0 0 26px', textAlign: 'center', lineHeight: 1.6,
+        }}>
+          한 번 완료로 표시하면<br />
+          <b style={{ fontWeight: 600, color: INK }}>읽는 중·읽기 전으로 되돌릴 수 없어요.</b>
+        </p>
 
-      <p style={{
-        fontSize: '11px', color: INK_80, margin: 0, lineHeight: 1.5,
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as CSSProperties}>
-        {paper.abstract}
-      </p>
-
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-        {chips.slice(0, 3).map(chip => <TagPill key={chip}>{chip}</TagPill>)}
+        <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, height: '44px',
+              background: '#fff', color: INK_80,
+              border: `1.2px solid ${INK_40}`, borderRadius: '8px',
+              fontSize: '14px', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+            }}
+          >
+            취소
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1, height: '44px',
+              background: MAIN, color: '#fff',
+              border: 'none', borderRadius: '8px',
+              fontSize: '14px', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
+            }}
+          >
+            읽기 완료
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -644,12 +803,20 @@ function HashIcon({ size, color }: { size: number; color: string }) {
   )
 }
 
-function BookIcon({ size, color }: { size: number; color: string }) {
+/* 읽기 전 / 읽는 중 아이콘 — 디자인에서 내보낸 PNG 를 그대로 쓴다.
+   PNG 는 색이 고정(파랑/초록)이라, 선택되지 않은 상태에서는 회색으로 죽여서 보여준다. */
+function StatusIcon({ src, active }: { src: string; active: boolean }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5V4.5z" />
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v5H6.5A2.5 2.5 0 0 1 4 19.5z" />
-    </svg>
+    <img
+      src={src}
+      alt=""
+      width={15}
+      height={15}
+      style={{
+        display: 'block', objectFit: 'contain',
+        filter: active ? 'none' : 'grayscale(1) opacity(0.45)',
+      }}
+    />
   )
 }
 
