@@ -18,7 +18,7 @@
 //
 // 논문 상세·목록·메인·마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
-import { getToken } from './auth'
+import { getToken, apiFetch } from './auth'
 
 // 서버 status 값과 동일하게 맞춤 (reading / completed)
 export type ReadStatus = 'reading' | 'completed'
@@ -50,15 +50,6 @@ const listeners = new Set<() => void>()
 function emit(next: ReadStatusMap): void {
   cache = next
   listeners.forEach(listener => listener())
-}
-
-function authHeaders(): HeadersInit {
-  const token = getToken()
-  return {
-    Accept: 'application/json',
-    'ngrok-skip-browser-warning': 'true',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
 }
 
 /* GET /papers/library?type=reading|completed 항목
@@ -101,7 +92,7 @@ async function fetchLibrary(type: 'reading' | 'completed'): Promise<LibraryItem[
   let page = 1
   // 안전장치: 최대 20페이지까지만
   for (; page <= 20; page++) {
-    const res = await fetch(`/api/papers/library?type=${type}&take=100&page=${page}`, { headers: authHeaders() })
+    const res = await apiFetch(`/api/papers/library?type=${type}&take=100&page=${page}`)
     if (!res.ok) break
     const json = await res.json()
     const items: LibraryItem[] = json.data ?? []
@@ -193,7 +184,7 @@ export async function setReadStatus(paper: SavedPaper, next: ReadStatus | null):
   emit(optimistic)   // 먼저 화면을 바꿔 반응이 즉각 보이게
 
   const post = async (target: string) => {
-    const res = await fetch(target, { method: 'POST', headers: authHeaders() })
+    const res = await apiFetch(target, { method: 'POST' })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`${res.status} ${body}`)
@@ -266,7 +257,7 @@ export type ReadingCalendar = {
 
 // month: 1~12 (달력 UI의 0-based month 가 아니라 실제 월)
 export async function getReadingCalendar(year: number, month: number): Promise<ReadingCalendar> {
-  const res = await fetch(`/api/papers/reading-status/calendar?year=${year}&month=${month}`, { headers: authHeaders() })
+  const res = await apiFetch(`/api/papers/reading-status/calendar?year=${year}&month=${month}`)
   if (!res.ok) throw new Error(String(res.status))
   return res.json()
 }

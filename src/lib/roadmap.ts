@@ -6,7 +6,7 @@
 //   GET   /roadmap/me             → 내 로드맵 조회 (최초+최근 스냅샷)
 //   GET   /roadmap/major-courses  → 전공 로드맵 (학년·학기별, 관심분야 매칭 강조)
 
-import { getToken } from './auth'
+import { apiFetch } from './auth'
 
 // Roadmap.tsx 설문 답변 → 백엔드 AnalyzeRoadmapDto 형태로 변환한 값
 export type RoadmapPayload = {
@@ -82,21 +82,11 @@ export type MajorCoursesResponse = {
   }[]
 }
 
-function authHeaders(): HeadersInit {
-  const token = getToken()
-  return {
-    Accept: 'application/json',
-    'ngrok-skip-browser-warning': 'true',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-}
-
 // 실패 시 status 를 담아 throw — 호출부에서 409(이미 존재)/404(없음) 등을 구분해 처리할 수 있게
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await apiFetch(`/api${path}`, {
     ...init,
     headers: {
-      ...authHeaders(),
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },

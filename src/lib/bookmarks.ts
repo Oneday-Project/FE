@@ -6,7 +6,7 @@
 //
 // 논문 목록 · 메인 · 마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
-import { getToken } from './auth'
+import { getToken, apiFetch } from './auth'
 
 export type BookmarkedPaper = {
   arxivId: string
@@ -29,15 +29,6 @@ const listeners = new Set<() => void>()
 function emit(next: BookmarkMap): void {
   cache = next
   listeners.forEach(listener => listener())
-}
-
-function authHeaders(): HeadersInit {
-  const token = getToken()
-  return {
-    Accept: 'application/json',
-    'ngrok-skip-browser-warning': 'true',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
 }
 
 /* GET /papers/library?type=bookmark 항목
@@ -73,7 +64,7 @@ async function syncFromServer(): Promise<void> {
       const next: BookmarkMap = {}
       let page = 1
       for (; page <= 20; page++) {
-        const res = await fetch(`/api/papers/library?type=bookmark&take=100&page=${page}`, { headers: authHeaders() })
+        const res = await apiFetch(`/api/papers/library?type=bookmark&take=100&page=${page}`)
         if (!res.ok) break
         const json = await res.json()
         for (const item of (json.data ?? []) as LibraryItem[]) {
@@ -141,7 +132,7 @@ export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
   const adding = !before[paper.arxivId]   // 이번 클릭이 '추가'인지 '해제'인지
 
   try {
-    const res = await fetch(url, { method: 'POST', headers: authHeaders() })
+    const res = await apiFetch(url, { method: 'POST' })
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       throw new Error(`${res.status} ${body}`)

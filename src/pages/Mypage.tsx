@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import { pageContainer, PAGE_TOP, pageTitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import { clearToken, fetchMe, getToken, type Me } from '../lib/auth'
-import ReadStatusTag from '../components/ReadStatusTag'
+import PaperCard from '../components/PaperCard'
+import type { Paper } from './Papers'
 import {
   subscribeReadStatus,
   getReadStatusSnapshot,
@@ -382,7 +383,7 @@ function BookmarkList() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px' }}>
       {papers.map(paper => (
         <BookmarkCard key={paper.arxivId} paper={paper} />
       ))}
@@ -390,58 +391,38 @@ function BookmarkList() {
   )
 }
 
+/* 마이페이지 목록은 GET /papers/library 를 쓰는데, 응답에 초록·인용수 같은 게 없어서
+   저장된 최소 정보(SavedPaper/BookmarkedPaper)만 들고 있다.
+   논문 목록·상세와 같은 카드를 쓰기 위해 Paper 모양으로 맞춰준다. */
+type LibraryPaper = { arxivId: string; title: string; publishedDate?: string; abstract?: string; fields: string[] }
+
+function toPaper(saved: LibraryPaper): Paper {
+  return {
+    arxivId: saved.arxivId,
+    doi: null,
+    title: saved.title,
+    authors: [],
+    abstract: saved.abstract ?? '',
+    researchFields: saved.fields,
+    publishedDate: saved.publishedDate ?? '',
+    citationCount: 0,
+    influenceScore: 0,
+    journal: '',
+    pdfUrl: '',
+    bookmarkCount: 0,
+    starTier: 0,
+  }
+}
+
 function BookmarkCard({ paper }: { paper: BookmarkedPaper }) {
   const navigate = useNavigate()
   return (
-    <div
+    <PaperCard
+      paper={toPaper(paper)}
+      bookmarked
+      onBookmark={() => void toggleBookmark(paper)}
       onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.arxivId)}`)}
-      style={{
-        background: '#fff', borderRadius: '14px', padding: '18px',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-        display: 'flex', flexDirection: 'column', gap: '8px', cursor: 'pointer',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-          {paper.publishedDate?.slice(0, 4) ?? ''}
-        </span>
-        <button
-          onClick={e => { e.stopPropagation(); void toggleBookmark(paper) }}
-          aria-label="북마크 해제"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', lineHeight: 0 }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="#3B6FE8" stroke="#3B6FE8" strokeWidth="2" strokeLinecap="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-        </button>
-      </div>
-
-      <p style={{
-        fontSize: '13px', fontWeight: 700, color: '#1a1a1a', lineHeight: 1.5, margin: 0,
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
-        {paper.title}
-      </p>
-
-      <p style={{
-        fontSize: '12px', color: '#6b7280', lineHeight: 1.6, margin: 0,
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
-        {paper.abstract}
-      </p>
-
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-        {paper.fields.map(field => (
-          <span key={field} style={{
-            fontSize: '11px', fontWeight: 500,
-            color: '#3B6FE8', background: '#EEF3FF',
-            borderRadius: '20px', padding: '3px 9px',
-          }}>
-            {field}
-          </span>
-        ))}
-      </div>
-    </div>
+    />
   )
 }
 
@@ -451,6 +432,7 @@ function BookmarkCard({ paper }: { paper: BookmarkedPaper }) {
 function ReadStatusList({ status }: { status: ReadStatus }) {
   const navigate = useNavigate()
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
+  const bookmarks = useSyncExternalStore(subscribeBookmarks, getBookmarksSnapshot)
 
   const entries = Object.values(readMap)
     .filter(entry => entry.status === status)
@@ -475,50 +457,17 @@ function ReadStatusList({ status }: { status: ReadStatus }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px' }}>
       {entries.map(({ paper }) => (
-        <div
+        <PaperCard
           key={paper.arxivId}
+          paper={toPaper(paper)}
+          bookmarked={!!bookmarks[paper.arxivId]}
+          onBookmark={() => void toggleBookmark({ ...paper, abstract: paper.abstract })}
           onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.arxivId)}`)}
-          style={{
-            background: '#fff', borderRadius: '14px', padding: '18px',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-            display: 'flex', flexDirection: 'column', gap: '8px', cursor: 'pointer',
-          }}
-        >
-          <ReadStatusTag status={status} />
-
-          <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-            {paper.publishedDate?.slice(0, 4) ?? ''}
-          </span>
-
-          <p style={{
-            fontSize: '13px', fontWeight: 700, color: '#1a1a1a', lineHeight: 1.5, margin: 0,
-            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          } as React.CSSProperties}>
-            {paper.title}
-          </p>
-
-          <p style={{
-            fontSize: '12px', color: '#6b7280', lineHeight: 1.6, margin: 0,
-            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          } as React.CSSProperties}>
-            {paper.abstract}
-          </p>
-
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-            {paper.fields.map(field => (
-              <span key={field} style={{
-                fontSize: '11px', fontWeight: 500,
-                color: '#3B6FE8', background: '#EEF3FF',
-                borderRadius: '20px', padding: '3px 9px',
-              }}>
-                {field}
-              </span>
-            ))}
-          </div>
-        </div>
+        />
       ))}
     </div>
   )
+
 }
