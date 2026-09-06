@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80, MAIN, MUTED, FONT } from '../styles/pageTheme'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
@@ -128,6 +128,16 @@ const STAR_OFF = INK_80     // 미선택 별 (#3C3C43 80%)
 
 
 
+/* 한 번에 받아올 논문 수.
+   검색은 전체를 훑어야 해서 백엔드 상한인 100으로 받는다(take=540 은 400 에러).
+   기본값 12로 두면 540편에 46번 요청해야 하는데 100이면 6번이면 된다.
+   검색 전 캐러셀 화면은 12편이면 충분하다(100편이면 페이지 도트가 34개가 된다). */
+const SEARCH_TAKE = 100
+const BROWSE_TAKE = 12
+
+/* 커서를 따라갈 최대 페이지 수 (100편 × 20 = 2000편까지). 현재 DB 는 540편 = 6페이지 */
+const MAX_FETCH_PAGES = 20
+
 const RESULTS_PER_PAGE = 12
 const RESULT_PAGE_WINDOW = 5   // 페이지 번호는 한 번에 5개까지 노출
 const sortOptions = [
@@ -143,6 +153,8 @@ export default function Papers() {
   const [period, setPeriod] = useState<'1y' | '3y' | '5y' | 'custom' | null>(null) // 연도: 1개만 (미선택 가능)
   const [searchValue, setSearchValue] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  // 마지막으로 서버에 실제로 보낸 키워드 (입력 중인 값과 구분 — 정렬·안내 문구에 사용)
+  const [appliedKeyword, setAppliedKeyword] = useState('')
   const [searched, setSearched] = useState(false)              // 검색 버튼을 눌렀는지 (누르면 결과 화면으로 전환)
   const [sort, setSort] = useState<SortKey>('all')
   const [resultPage, setResultPage] = useState(0)
@@ -171,6 +183,7 @@ export default function Papers() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null) // 다음 페이지 커서
+  const fetchIdRef = useRef(0)   // 진행 중인 조회 식별 (오래된 응답 무시용)
   const [hasNext, setHasNext] = useState(false) // 더보기 버튼 표시 여부
 
   // 컴포넌트 처음 마운트될 때 논문 자동 불러오기
@@ -201,18 +214,32 @@ export default function Papers() {
     }
   }
 
-  const fetchPapers = async (cursor?: string) => {
+  /* 논문 조회.
+     검색 결과는 DB 전체(540편 기준, 12편씩 46페이지)를 대상으로 해야 하므로
+     loadAll=true 면 커서를 끝까지 따라가며 모든 페이지를 모은다.
+     받는 대로 화면에 반영해서 첫 페이지는 바로 보이고 나머지는 뒤에서 채워진다. */
+  const fetchPapers = async ({ loadAll = false }: { loadAll?: boolean } = {}) => {
+    /* 전체 로드는 요청을 수십 번 순차로 보내는데, 그 사이 새 검색이 시작될 수 있다.
+       요청마다 번호를 매겨서, 최신 요청이 아니면 중간에 멈추고 결과도 반영하지 않는다.
+       (이전 검색 결과가 뒤늦게 도착해 화면을 덮어쓰는 것을 막는다) */
+    const fetchId = ++fetchIdRef.current
+    const isStale = () => fetchIdRef.current !== fetchId
+
     setLoading(true)
     setError(null)
 
-    try {
+    const keyword = searchValue.trim()
+
+    // 현재 필터로 요청 URL 만들기 (커서만 페이지마다 바뀜)
+    const buildUrl = (cursor: string | null) => {
       const params = new URLSearchParams()
-      if (cursor) params.set('cursor', cursor) // 더보기 클릭 시 커서 파라미터 추가
+      params.set('take', String(loadAll ? SEARCH_TAKE : BROWSE_TAKE))
+      if (cursor) params.set('cursor', cursor)
 
-      // 키워드 검색 (keyword=Qwen → 결과 좁혀짐, 백엔드는 최소 2글자 요구)
-      if (searchValue.trim()) params.set('keyword', searchValue.trim())
+      // 키워드 검색 (백엔드는 최소 2글자 요구)
+      if (keyword) params.set('keyword', keyword)
 
-      // 분야: UI 태그가 백엔드 코드와 동일(AI/CV/NLP…) → 그대로 반복 파라미터로 전송 (OR 필터)
+      // 분야: UI 태그가 백엔드 코드와 동일(AI/CV/NLP…) → 반복 파라미터로 전송 (OR 필터)
       selectedTags.forEach(tag => params.append('tags', tag))
 
       // 중요도: starTier(1~3)
@@ -223,41 +250,60 @@ export default function Papers() {
       if (yearRange) params.set('yearRange', String(yearRange))
 
       const query = params.toString()
-      // 실제 요청 URL: /api/papers → vite proxy → ngrok → 백엔드
-      const url = `${API_PREFIX}/papers${query ? `?${query}` : ''}`
+      return `${API_PREFIX}/papers${query ? `?${query}` : ''}`
+    }
 
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: authHeaders(), // /papers 는 토큰이 필요함 (없으면 401)
-      })
+    try {
+      const collected: Paper[] = []
+      let cursor: string | null = null
 
-      // ✅ Network 탭에서 Status 200이면 연결 성공
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(`HTTP ${res.status}: ${text}`)
+      for (let page = 0; page < MAX_FETCH_PAGES; page++) {
+        const res = await fetch(buildUrl(cursor), { method: 'GET', headers: authHeaders() })
+        if (isStale()) return
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
+
+        const json = await res.json()
+        const fetched: Paper[] = Array.isArray(json)
+          ? json
+          : json.data ?? json.papers ?? []
+
+        collected.push(...fetched)
+        cursor = Array.isArray(json) ? null : json.nextCursor ?? null
+        const more = !Array.isArray(json) && Boolean(json.hasNext) && Boolean(cursor)
+
+        // 첫 페이지가 도착하면 바로 화면에 보여주고, 나머지는 이어서 채운다
+        setPapers([...collected])
+        setAppliedKeyword(keyword)
+        setNextCursor(cursor)
+        setHasNext(more)
+        setLoading(false)
+
+        if (!loadAll || !more) break
       }
-
-      const json = await res.json()
-      // ✅ 데이터 확인하려면 아래 주석 해제 → F12 Console 탭에서 확인해라!!
-       console.log('📦 받아온 데이터:', json)
-
-      // 백엔드 응답이 배열이면 그대로, 아니면 data/papers 필드에서 추출
-      const fetched: Paper[] = Array.isArray(json)
-        ? json
-        : json.data ?? json.papers ?? []
-
-      // 더보기면 기존 목록에 추가, 첫 로드면 새로 세팅
-      setPapers(prev => (cursor ? [...prev, ...fetched] : fetched))
-      setNextCursor(Array.isArray(json) ? null : json.nextCursor ?? null)
-      setHasNext(Array.isArray(json) ? false : json.hasNext ?? false)
-
-      // 북마크 상태는 lib/bookmarks 에서 /users/me 기준으로 관리함
     } catch (e) {
-      // ❌ 실패 시 여기서 에러 출력 → F12 Console 탭에서 확인
+      if (isStale()) return
       console.error('논문 불러오기 실패:', e)
       setError('논문을 불러오는 데 실패했습니다. 콘솔에서 API 주소 또는 CORS 오류를 확인해주세요.')
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
+    }
+  }
+
+  // '더 보기' — 다음 한 페이지만 이어붙인다 (검색 전 캐러셀 화면용)
+  const loadMorePapers = async () => {
+    if (!nextCursor) return
+    try {
+      const res = await fetch(`${API_PREFIX}/papers?take=${BROWSE_TAKE}&cursor=${encodeURIComponent(nextCursor)}`, {
+        method: 'GET', headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = await res.json()
+      const fetched: Paper[] = Array.isArray(json) ? json : json.data ?? json.papers ?? []
+      setPapers(prev => [...prev, ...fetched])
+      setNextCursor(Array.isArray(json) ? null : json.nextCursor ?? null)
+      setHasNext(Array.isArray(json) ? false : Boolean(json.hasNext))
+    } catch (e) {
+      console.error('논문 더 불러오기 실패:', e)
     }
   }
 
@@ -276,26 +322,60 @@ export default function Papers() {
   const selectPeriod = (key: '1y' | '3y' | '5y' | 'custom') =>
     setPeriod(prev => (prev === key ? null : key))
 
-  // 돋보기 버튼(또는 Enter)을 눌러야 현재 선택된 필터로 검색 적용
+  // 돋보기 버튼(또는 Enter)을 누르면 즉시 검색
   const handleSearch = () => {
     setSearched(true)   // 캐러셀 2개 → 검색 결과 그리드로 전환
     setSort('all')
     setResultPage(0)
-    fetchPapers()  // 커서 없이 → 첫 페이지부터 현재 필터로 다시 조회
+    void fetchPapers({ loadAll: true })   // 전체 논문에서 검색
   }
+
+  /* 입력하는 대로 자동 검색 (마지막 타자 후 400ms).
+     - 백엔드가 2글자 미만 키워드에 400을 주므로 그 전까지는 요청하지 않는다
+     - 검색어를 다 지우면 원래 캐러셀 화면으로 돌아간다
+     - 첫 렌더는 건너뛴다 (마운트 시 이미 한 번 불러옴) */
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+
+    const keyword = searchValue.trim()
+    if (keyword.length === 1) return   // 2글자부터 검색
+
+    const timer = setTimeout(() => {
+      if (keyword === '') {
+        setSearched(false)   // 검색어를 비우면 처음 화면으로
+      } else {
+        setSearched(true)
+        setSort('all')
+        setResultPage(0)
+      }
+      void fetchPapers({ loadAll: keyword !== '' })
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [searchValue])
 
   /* 검색 결과 정렬 — 백엔드에 정렬 파라미터가 없어서 받아온 목록에서 처리한다.
      '전체'는 백엔드가 준 순서 그대로. */
   const sortedResults = useMemo(() => {
-    if (sort === 'all') return papers
-    const list = [...papers]
     if (sort === 'recent') {
-      list.sort((a, b) => (b.publishedDate ?? '').localeCompare(a.publishedDate ?? ''))
-    } else {
-      list.sort((a, b) => (b.citationCount ?? 0) - (a.citationCount ?? 0))
+      return [...papers].sort((a, b) => (b.publishedDate ?? '').localeCompare(a.publishedDate ?? ''))
     }
-    return list
-  }, [papers, sort])
+    if (sort === 'cited') {
+      return [...papers].sort((a, b) => (b.citationCount ?? 0) - (a.citationCount ?? 0))
+    }
+
+    /* '전체' — 백엔드가 초록 전문까지 검색해서 흔한 단어는 거의 다 걸린다.
+       제목에 키워드가 있는 논문을 위로 올려 관련도 높은 것부터 보이게 한다.
+       (sort 는 안정 정렬이라 같은 그룹 안에서는 서버가 준 순서가 유지된다) */
+    if (!appliedKeyword) return papers
+    const keyword = appliedKeyword.toLowerCase()
+    const inTitle = (p: Paper) => (p.title ?? '').toLowerCase().includes(keyword)
+    return [...papers].sort((a, b) => Number(inTitle(b)) - Number(inTitle(a)))
+  }, [papers, sort, appliedKeyword])
 
   const totalResultPages = Math.max(1, Math.ceil(sortedResults.length / RESULTS_PER_PAGE))
   const pageResults = sortedResults.slice(
@@ -303,13 +383,9 @@ export default function Papers() {
     resultPage * RESULTS_PER_PAGE + RESULTS_PER_PAGE,
   )
 
-  /* 페이지 이동. 마지막 페이지까지 왔는데 서버에 더 있으면(hasNext) 커서로 이어서 받아온다. */
+  // 검색 시 전체를 이미 받아오므로 페이지 이동은 화면 전환만 하면 된다
   const goResultPage = (next: number) => {
-    const clamped = Math.max(0, Math.min(next, totalResultPages - 1))
-    setResultPage(clamped)
-    if (clamped >= totalResultPages - 1 && hasNext && nextCursor && !loading) {
-      void fetchPapers(nextCursor)
-    }
+    setResultPage(Math.max(0, Math.min(next, totalResultPages - 1)))
   }
 
   const changeSort = (key: SortKey) => {
@@ -510,8 +586,15 @@ export default function Papers() {
         {/* 검색을 누른 뒤 — 선택한 조건에 맞는 검색 결과 (피그마 1026:5604~5646) */}
         {!loading && !error && searched && (
           <>
-            <h2 style={{ fontSize: '20px', fontWeight: 600, color: INK, margin: '0 0 14px' }}>
+            <h2 style={{
+              display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap',
+              fontSize: '20px', fontWeight: 600, color: INK, margin: '0 0 14px',
+            }}>
               회원님이 선택한 조건에 맞는 검색 결과입니다.
+              {/* 필터가 실제로 적용됐는지 바로 보이도록 건수를 함께 표시 */}
+              <span style={{ fontSize: '14px', fontWeight: 500, color: MAIN }}>
+                {sortedResults.length}건
+              </span>
             </h2>
             <div style={{ height: '1px', background: '#E3E8F5' }} />
 
@@ -583,7 +666,7 @@ export default function Papers() {
             {hasNext && (
               <div style={{ textAlign: 'center', marginTop: '24px' }}>
                 <button
-                  onClick={() => nextCursor && fetchPapers(nextCursor)}
+                  onClick={() => void loadMorePapers()}
                   style={{
                     padding: '10px 28px', fontSize: '14px', fontWeight: 500,
                     background: MAIN, color: '#fff', border: 'none',
@@ -788,13 +871,42 @@ function PaperSection({
   const CARDS_PER_PAGE = 3 // 한 번에 보여줄 카드 수
   const [pageIndex, setPageIndex] = useState(0)
 
-  const totalPages = Math.max(1, Math.ceil(papers.length / CARDS_PER_PAGE))
+  /* 새로고침 버튼 — 받아온 목록 안에서 순서를 섞어 다른 논문을 보여준다.
+     난수는 클릭할 때 seed 로만 뽑고, 섞기 자체는 seed 로 결정되는 순수 계산이다.
+     (useMemo 안에서 Math.random 을 쓰면 렌더마다 결과가 달라질 수 있어 피한다)
+     seed 0 = 서버가 준 순서 그대로(첫 진입). spin 은 아이콘 회전 횟수. */
+  const [seed, setSeed] = useState(0)
+  const [spin, setSpin] = useState(0)
+
+  const shuffled = useMemo(() => {
+    if (seed === 0) return papers
+    const list = [...papers]
+    let state = seed
+    const rand = () => {
+      state = (state * 1103515245 + 12345) % 2147483648   // 선형 합동 생성기
+      return state / 2147483648
+    }
+    for (let i = list.length - 1; i > 0; i--) {           // Fisher-Yates
+      const j = Math.floor(rand() * (i + 1))
+      ;[list[i], list[j]] = [list[j], list[i]]
+    }
+    return list
+  }, [papers, seed])
+
+  const totalPages = Math.max(1, Math.ceil(shuffled.length / CARDS_PER_PAGE))
 
   // 현재 페이지에 보여줄 논문만 슬라이싱
-  const visiblePapers = papers.slice(
+  const visiblePapers = shuffled.slice(
     pageIndex * CARDS_PER_PAGE,
     pageIndex * CARDS_PER_PAGE + CARDS_PER_PAGE
   )
+
+  // 다시 섞고 첫 페이지로
+  const reshuffle = () => {
+    setSeed(Math.floor(Math.random() * 2147483646) + 1)
+    setSpin(n => n + 1)
+    setPageIndex(0)
+  }
 
   const goPrev = () => {
     setPageIndex(prev => (prev === 0 ? totalPages - 1 : prev - 1))
@@ -821,13 +933,29 @@ function PaperSection({
           <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1a1a1a', margin: 0 }}>{title}</h2>
           {subtitle && <span style={{ fontSize: '12px', color: '#9ca3af' }}>{subtitle}</span>}
         </div>
-        {/* 새로고침 버튼 (현재는 UI만 있고 기능 미연결) */}
-        <button style={{
-          width: '32px', height: '32px', borderRadius: '50%',
-          background: '#f3f4f6', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round">
+        {/* 새로고침 — 목록 안에서 무작위로 다시 섞는다 */}
+        <button
+          onClick={reshuffle}
+          disabled={papers.length <= CARDS_PER_PAGE}
+          aria-label={`${title} 다시 섞기`}
+          title="다른 논문 보기"
+          style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            background: '#f3f4f6', border: 'none',
+            cursor: papers.length <= CARDS_PER_PAGE ? 'default' : 'pointer',
+            opacity: papers.length <= CARDS_PER_PAGE ? 0.4 : 1,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {/* 누를 때마다 한 바퀴 돌아 눌린 게 보이도록 */}
+          <svg
+            width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="#6b7280" strokeWidth="2" strokeLinecap="round"
+            style={{
+              transform: `rotate(${spin * 360}deg)`,
+              transition: 'transform 0.5s ease',
+            }}
+          >
             <path d="M23 4v6h-6M1 20v-6h6"/>
             <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
