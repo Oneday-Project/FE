@@ -1,26 +1,31 @@
 import type { ReactNode } from 'react'
+import designNibIcon from './iconoir_design-nib-solid.png'
+import frontEndIcon from './hugeicons_web-design-02.png'
+import backEndIcon from './streamline-ultimate_coding-apps-website-apps-browser-bold.svg'
 
 /* 피그마: Footer final (1229:13681)
    구성은 피그마 그대로, 크기만 프로젝트 스케일에 맞춰 살짝 줄임. */
 
-const NAVY = '#00178E'
+import { MAIN as NAVY } from '../styles/pageTheme'
 const INK = '#3C3C43'
 const INK_80 = 'rgba(60,60,67,0.8)'
 
+/* 파트별 아이콘은 디자인에서 내보낸 파일을 그대로 쓴다
+   (직접 그린 SVG 는 모양이 달라서 교체함) */
 const teams = [
   {
     title: 'Design',
-    icon: <NibIcon />,
+    icon: designNibIcon,        // 펜촉
     members: ['Yeongju Sim'],
   },
   {
     title: 'Front - End',
-    icon: <WebDesignIcon />,
+    icon: frontEndIcon,         // 브라우저 창
     members: ['Heejung Jang', 'Serih Yu'],
   },
   {
     title: 'Back - End',
-    icon: <BrowserIcon />,
+    icon: backEndIcon,          // 브라우저 창 + 데이터 블록
     members: ['Jungwoo Kim', 'Yerin Song'],
   },
 ]
@@ -133,41 +138,22 @@ export default function Footer() {
   )
 }
 
-function ColumnTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function ColumnTitle({ icon, children }: { icon: string; children: ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: '0 0 22px' }}>
       <span style={{ fontSize: '15px', fontWeight: 600, color: INK }}>{children}</span>
-      {icon}
+      <img
+        src={icon}
+        alt=""
+        width={15}
+        height={15}
+        style={{ display: 'block', flexShrink: 0, objectFit: 'contain' }}
+      />
     </div>
   )
 }
 
 /* ───────── 아이콘 ───────── */
-
-function NibIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill={NAVY}>
-      <path d="M3 3l7.5 2.2 8.3 8.3-5 5-8.3-8.3L3 3zm4.6 4.6a1.4 1.4 0 1 0 2-2 1.4 1.4 0 0 0-2 2zm7.7 12.6l1.8-1.8 2.6 2.6-1.8 1.8-2.6-2.6z" />
-    </svg>
-  )
-}
-
-function WebDesignIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={NAVY} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" />
-      <path d="M2.5 8.5h19M6 6h.01M8.5 6h.01" />
-    </svg>
-  )
-}
-
-function BrowserIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill={NAVY}>
-      <path d="M3 4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4zm2 5v11h14V9H5zm1.6-3.4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm2.8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
-    </svg>
-  )
-}
 
 function MailIcon() {
   return (

@@ -6,7 +6,7 @@
 //
 // 논문 목록 · 메인 · 마이페이지가 같은 상태를 구독하도록 여기서 모아 관리한다.
 
-import { getToken } from './auth'
+import { getToken, apiFetch } from './auth'
 
 export type BookmarkedPaper = {
   arxivId: string
@@ -29,15 +29,6 @@ const listeners = new Set<() => void>()
 function emit(next: BookmarkMap): void {
   cache = next
   listeners.forEach(listener => listener())
-}
-
-function authHeaders(): HeadersInit {
-  const token = getToken()
-  return {
-    Accept: 'application/json',
-    'ngrok-skip-browser-warning': 'true',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
 }
 
 /* GET /papers/library?type=bookmark 항목
@@ -63,17 +54,17 @@ function toBookmarkedPaper(item: LibraryItem): BookmarkedPaper | null {
   }
 }
 
-// 최초 구독 시 한 번 서버에서 불러옴 (비로그인이면 건너뜀)
-function ensureLoaded(): void {
-  if (loaded || loading || !getToken()) return
+/* 서버의 북마크 목록을 다시 읽어 캐시를 서버 값으로 맞춘다. */
+async function syncFromServer(): Promise<void> {
+  if (!getToken()) return
 
   const gen = generation
-  loading = (async () => {
+  {
     try {
       const next: BookmarkMap = {}
       let page = 1
       for (; page <= 20; page++) {
-        const res = await fetch(`/api/papers/library?type=bookmark&take=100&page=${page}`, { headers: authHeaders() })
+        const res = await apiFetch(`/api/papers/library?type=bookmark&take=100&page=${page}`)
         if (!res.ok) break
         const json = await res.json()
         for (const item of (json.data ?? []) as LibraryItem[]) {
@@ -89,10 +80,14 @@ function ensureLoaded(): void {
       emit(next)
     } catch {
       // 네트워크 실패 시 다음 구독에서 다시 시도
-    } finally {
-      if (gen === generation) loading = null
     }
-  })()
+  }
+}
+
+// 최초 구독 시 한 번 서버에서 불러옴 (비로그인이면 건너뜀)
+function ensureLoaded(): void {
+  if (loaded || loading || !getToken()) return
+  loading = syncFromServer().finally(() => { loading = null })
 }
 
 /* 로그인/로그아웃/계정 전환 시 이전 사용자의 북마크가 화면에 남지 않게 비운다. */
@@ -134,12 +129,23 @@ export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
     ? `/api/papers/hai-papers/${encodeURIComponent(paper.arxivId.slice(4))}/bookmark`
     : `/api/papers/bookmark/${encodeURIComponent(paper.arxivId)}`
 
+  const adding = !before[paper.arxivId]   // 이번 클릭이 '추가'인지 '해제'인지
+
   try {
-    const res = await fetch(url, { method: 'POST', headers: authHeaders() })
-    if (!res.ok) throw new Error(String(res.status))
-  } catch {
+    const res = await apiFetch(url, { method: 'POST' })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`${res.status} ${body}`)
+    }
+    /* 서버가 실제로 어떤 상태가 됐는지 다시 읽어와 맞춘다.
+       (북마크 API 가 토글이라 낙관적 값이 서버와 어긋날 수 있음) */
+    await syncFromServer()
+  } catch (e) {
     // 그 사이 계정이 바뀌었으면 이전 계정 데이터를 되살리면 안 된다
     if (gen === generation) emit(before)
+    console.error(
+      `북마크 ${adding ? '추가' : '해제'} 실패:`, paper.arxivId, '→', url.replace('/api', ''), e,
+    )
   }
 }
 

@@ -5,6 +5,16 @@ import type { CSSProperties } from 'react'
    - 바탕 #F5F9FF 위에 상단 420px 화이트 그라데이션 1겹
    - 피그마는 1440 고정 기준이라 색·구성만 가져오고 크기는 프로젝트 스케일(28/15) 유지 */
 
+/* 메인 컬러 — 피그마 색상 스타일 'main' (#00178E 100%).
+   버튼·선택된 필터·페이지네이션 등 강조는 전부 이 값을 쓴다. */
+export const MAIN = '#00178E'
+
+/* 보조 설명 텍스트 — 피그마 색상 스타일 '9797A9' */
+export const MUTED = '#9797A9'
+
+/* 전 페이지 공통 글꼴 */
+export const FONT = "'Pretendard', 'Apple SD Gothic Neo', sans-serif"
+
 export const PAGE_BG = '#F5F9FF'
 export const INK = '#3C3C43'
 export const INK_80 = 'rgba(60,60,67,0.8)'
@@ -50,3 +60,11 @@ export const pageSubtitle: CSSProperties = {
 
 /* 제목 블록 아래 간격 */
 export const HERO_GAP = '40px'
+
+/* 읽음 상태 색 — 논문 목록 카드 뱃지(ReadStatusTag)와 논문 상세 토글이 같은 값을 쓴다.
+   피그마 색상 스타일: 읽기 전 bookmark 계열 / 읽는 중 read-end / 읽기 완료 read-ing */
+export const READ_STATUS_STYLE = {
+  none:      { color: '#3B82F6', background: 'rgba(59,130,246,0.10)', label: '읽기 전' },
+  reading:   { color: '#00B454', background: 'rgba(0,202,94,0.12)',   label: '읽는 중' },
+  completed: { color: '#F59E0B', background: 'rgba(245,158,11,0.12)', label: '읽기 완료' },
+} as const

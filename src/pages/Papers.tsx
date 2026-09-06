@@ -1,10 +1,9 @@
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react'
-import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80 } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80, MAIN, MUTED, FONT } from '../styles/pageTheme'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
-import ReadStatusTag from '../components/ReadStatusTag'
+import PaperCard from '../components/PaperCard'
 import { isLoggedIn, getToken } from '../lib/auth'
-import { subscribeReadStatus, getReadStatusSnapshot } from '../lib/readStatus'
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from '../lib/bookmarks'
 
 /* 분야 태그 — 피그마와 같은 줄 구성으로 고정한다.
@@ -15,6 +14,20 @@ const TAG_ROWS = [
   ['Retrieval AI', 'SAP', 'HCI', 'Multimodal'],
   ['Code AI'],
 ] as const
+
+/* 분야 약자 설명 — '분야 ⓘ' 에 마우스를 올리면 뜨는 말풍선 내용 */
+const FIELD_INFO: { name: string; full: string; desc: string }[] = [
+  { name: 'SML', full: 'Statistical Machine Learning', desc: '통계와 확률을 기반으로 데이터의 패턴을 학습하고 예측하는 분야' },
+  { name: 'ML', full: 'Machine Learning', desc: '데이터를 학습해 분류, 예측, 의사결정을 수행하는 AI 분야' },
+  { name: 'CV', full: 'Computer Vision', desc: '이미지와 영상을 이해하고 분석하는 AI 분야' },
+  { name: 'NLP', full: 'Natural Language Processing', desc: '텍스트와 언어를 이해하고 분석·생성하는 AI 분야' },
+  { name: 'Robotics', full: 'Robotics', desc: '로봇이 환경을 인식하고 판단하며 행동하도록 연구하는 분야' },
+  { name: 'Retrieval AI', full: 'Retrieval Artificial Intelligence', desc: '대규모 데이터에서 필요한 정보를 검색하고 활용하는 AI 분야' },
+  { name: 'SAP', full: 'Speech and Audio Processing', desc: '음성과 소리 데이터를 인식하고 분석·처리하는 AI 분야' },
+  { name: 'HCI', full: 'Human–Computer Interaction', desc: '사람과 컴퓨터·AI 사이의 상호작용과 사용자 경험을 연구하는 분야' },
+  { name: 'Multimodal', full: 'Multimodal Artificial Intelligence', desc: '텍스트, 이미지, 음성 등 여러 형태의 데이터를 함께 이해하는 AI 분야' },
+  { name: 'Code AI', full: 'AI for Code / Code Intelligence', desc: '코드를 이해하고 생성·분석하며 개발을 지원하는 AI 분야' },
+]
 const MAX_TAGS = 3 // 분야는 최대 3개까지 선택
 
 // 논문 데이터 타입 정의 (백엔드 응답 형식과 일치해야 함)
@@ -102,9 +115,9 @@ const TAG_BASE = {
 
 const tagStyle = (selected: boolean) => ({
   ...TAG_BASE,
-  border: `1.2px solid ${selected ? '#00178E' : 'transparent'}`,
+  border: `1.2px solid ${selected ? MAIN : 'transparent'}`,
   fontWeight: selected ? 600 : 500,
-  color: selected ? '#00178E' : INK,
+  color: selected ? MAIN : INK,
 })
 
 // 필터 줄 라벨 (중요도 / 연도 / 분야) — Pretendard Medium 16 / #3C3C43
@@ -113,16 +126,7 @@ const filterLabel = { fontSize: '16px', fontWeight: 500, color: INK, flexShrink:
 const STAR_ON = '#FFF188'   // 선택된 중요도 별
 const STAR_OFF = INK_80     // 미선택 별 (#3C3C43 80%)
 
-/* 논문 카드 (피그마 기준) — 높이 255 / 내부 항목 간격 12
-   제목 Pretendard Medium 16 · 행간 19, 본문 Regular 12 · 행간 16
-   분야 태그 좌우패딩 8 · 상하패딩 6, 태그 간 간격 10 */
-const CARD_HEIGHT = '255px'
-const CARD_GAP = '12px'
-const CARD_TITLE = { fontSize: '16px', fontWeight: 500, lineHeight: '19px' } as const
-const CARD_BODY = { fontSize: '12px', fontWeight: 400, lineHeight: '16px' } as const
-const CHIP_GAP = '10px'
-const BOOKMARK_ON = 'rgba(59,130,246,0.7)'   // #3B82F6 70%
-const MAIN_NAVY = '#00178E'                  // 페이지네이션 · 더보기 버튼 메인컬러
+
 
 const RESULTS_PER_PAGE = 12
 const RESULT_PAGE_WINDOW = 5   // 페이지 번호는 한 번에 5개까지 노출
@@ -402,7 +406,7 @@ export default function Papers() {
         <div style={{
           display: 'flex', alignItems: 'center',
           background: '#fff', borderRadius: '999px',
-          border: searchFocused ? '2px solid #00178E' : '1.5px solid #e5e7eb',
+          border: searchFocused ? `2px solid ${MAIN}` : '1.5px solid #e5e7eb',
           padding: searchFocused ? '6px 6px 6px 25px' : '7px 7px 7px 26px',
           marginBottom: '18px',
           boxShadow: searchFocused ? '0 6px 22px rgba(0,23,142,0.18)' : '0 6px 22px rgba(0,0,0,0.07)',
@@ -421,7 +425,7 @@ export default function Papers() {
             onClick={handleSearch}
             aria-label="검색"
             style={{
-            width: '44px', height: '44px', background: '#00178E',
+            width: '44px', height: '44px', background: MAIN,
             border: 'none', borderRadius: '50%', display: 'flex',
             alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
           }}>
@@ -468,21 +472,7 @@ export default function Papers() {
                ⓘ 는 자리만 잡아둔 임시 아이콘(말풍선 디자인 이미지로 교체 예정) */}
             <span style={{ ...filterLabel, paddingTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
               분야
-              <button
-                type="button"
-                aria-label="분야는 최대 3개까지 선택할 수 있습니다"
-                title="분야는 최대 3개까지 선택할 수 있습니다"
-                style={{
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', lineHeight: 0,
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                  stroke="rgba(60,60,67,0.4)" strokeWidth="1.8" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="9.5" />
-                  <path d="M12 10.5v6M12 7.4h.01" />
-                </svg>
-              </button>
+              <FieldInfoTip />
             </span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {TAG_ROWS.map((row, rowIndex) => (
@@ -534,7 +524,7 @@ export default function Papers() {
                     background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                     fontFamily: 'inherit', fontSize: '14px',
                     fontWeight: active ? 600 : 500,
-                    color: active ? '#00178E' : 'rgba(60,60,67,0.4)',
+                    color: active ? MAIN : 'rgba(60,60,67,0.4)',
                     transition: 'color 0.15s',
                   }}>{label}</button>
                 )
@@ -596,7 +586,7 @@ export default function Papers() {
                   onClick={() => nextCursor && fetchPapers(nextCursor)}
                   style={{
                     padding: '10px 28px', fontSize: '14px', fontWeight: 500,
-                    background: MAIN_NAVY, color: '#fff', border: 'none',
+                    background: MAIN, color: '#fff', border: 'none',
                     borderRadius: '10px', cursor: 'pointer',
                   }}
                 >
@@ -656,7 +646,7 @@ function ResultPagination({
             style={{
               background: 'none', border: 'none', padding: 0, cursor: 'pointer',
               fontFamily: 'inherit', fontSize: '20px', fontWeight: 500, lineHeight: 'normal',
-              color: i === page ? MAIN_NAVY : INK_80,
+              color: i === page ? MAIN : INK_80,
               transition: 'color 0.15s',
             }}
           >{i + 1}</button>
@@ -772,7 +762,7 @@ function LoginGateModal({ onClose, onLogin }: { onClose: () => void; onLogin: ()
           onClick={onLogin}
           style={{
             width: '100%', height: '46px',
-            background: '#00178E', color: '#fff',
+            background: MAIN, color: '#fff',
             border: 'none', borderRadius: '8px',
             fontSize: '15px', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
           }}
@@ -914,7 +904,7 @@ function PaperSection({
               width: i === pageIndex ? '20px' : '8px',
               height: '8px',
               borderRadius: '4px',
-              background: i === pageIndex ? MAIN_NAVY : '#d1d5db',
+              background: i === pageIndex ? MAIN : '#d1d5db',
               transition: 'all 0.2s',
               border: 'none',
               padding: 0,
@@ -935,100 +925,76 @@ function PaperSection({
   )
 }
 
-// 개별 논문 카드 컴포넌트
-function PaperCard({
-  paper, bookmarked, onBookmark, onClick,
-}: {
-  paper: Paper
-  bookmarked: boolean
-  onBookmark: () => void
-  onClick: () => void
-}) {
-  const year = paper.publishedDate?.slice(0, 4) ?? '' // 출판연도 (앞 4자리)
-  const chips = paper.researchFields ?? [] // 분야 칩 전체
+/* '분야 ⓘ' — 마우스를 올리거나 키보드 포커스가 오면 분야 약자 설명 말풍선을 띄운다.
+   말풍선은 ⓘ 위쪽에 뜨고 아래로 꼬리가 향한다. */
+function FieldInfoTip() {
+  const [open, setOpen] = useState(false)
 
-  // 상세 페이지에서 지정한 읽음 상태 (localStorage 공유)
-  const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
-  const readStatus = readMap[paper.arxivId]?.status ?? null
+  // 말풍선 왼쪽 끝에서 꼬리까지의 거리 — 꼬리가 ⓘ 가운데를 가리키게 맞춘 값
+  const TAIL_LEFT = 60
+  const ICON_HALF = 9
 
   return (
-    <div
-      onClick={onClick}
-      style={{
-        background: '#fff', borderRadius: '14px', padding: '16px',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.07)', border: '1px solid #f0f0f0',
-        /* 피그마 기준 카드 높이 255. 그리드가 한 줄의 카드 높이를 맞춰주므로
-           minHeight 로 두면 태그가 두 줄이 돼도 잘리지 않고 한 줄 전체가 함께 늘어난다.
-           내부 항목 간격은 피그마와 동일하게 12px */
-        minHeight: CARD_HEIGHT, boxSizing: 'border-box', minWidth: 0,
-        display: 'flex', flexDirection: 'column', gap: CARD_GAP,
-        cursor: 'pointer', transition: 'box-shadow 0.2s, transform 0.2s',
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 6px 24px rgba(59,111,232,0.13)'
-        ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 12px rgba(0,0,0,0.07)'
-        ;(e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'
-      }}
+    <span
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {/* 읽음 상태 뱃지 — 상세 페이지에서 설정한 값. 아직 없으면 '읽기 전' 기본 상태 */}
-        <ReadStatusTag status={readStatus} showDefault />
-        {/* 북마크 버튼 (카드 클릭 이벤트 전파 방지)
-            휴먼AI 논문도 POST /papers/hai-papers/{id}/bookmark 로 토글된다 */}
-        <button
-          onClick={e => { e.stopPropagation(); onBookmark() }}
-          aria-label={bookmarked ? '북마크 해제' : '북마크'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', lineHeight: 0 }}
+      <button
+        type="button"
+        aria-label="분야 약자 설명"
+        aria-expanded={open}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', lineHeight: 0,
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke={open ? MAIN : 'rgba(60,60,67,0.4)'} strokeWidth="1.8" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="M12 10.5v6M12 7.4h.01" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="tooltip"
+          style={{
+            position: 'absolute', bottom: 'calc(100% + 12px)',
+            left: ICON_HALF - TAIL_LEFT,
+            width: '540px',
+            // 창이 좁아도 화면 밖으로 잘리지 않게
+            maxWidth: 'calc(100vw - 40px)',
+            background: '#fff', borderRadius: '16px', padding: '14px 18px',
+            boxShadow: '0 12px 36px rgba(15,23,42,0.16)',
+            display: 'flex', flexDirection: 'column', gap: '5px',
+            fontFamily: FONT,
+            textAlign: 'left', zIndex: 50, cursor: 'default',
+          }}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24"
-            fill={bookmarked ? BOOKMARK_ON : 'none'}
-            stroke={bookmarked ? BOOKMARK_ON : 'rgba(60,60,67,0.4)'}
-            strokeWidth="2" strokeLinecap="round"
-          >
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-          </svg>
-        </button>
-      </div>
+          {FIELD_INFO.map(item => (
+            <p key={item.name} style={{
+              margin: 0, fontSize: '10px', lineHeight: 1.5, color: MUTED, fontWeight: 400,
+            }}>
+              <b style={{ fontWeight: 700 }}>{item.name} ({item.full}):</b>{' '}
+              {item.desc}
+            </p>
+          ))}
 
-      <span style={{ fontSize: '11px', lineHeight: '13px', color: '#9ca3af' }}>{year}</span>
-
-      {/* 논문 제목 (최대 2줄) — Pretendard Medium 16 / 행간 19 */}
-      <p style={{
-        ...CARD_TITLE, color: INK, margin: 0,
-        // 긴 단어가 그리드 컬럼 폭을 밀어내지 않도록 (카드 폭 균일 유지)
-        minWidth: 0, overflowWrap: 'anywhere',
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
-        {paper.title}
-      </p>
-
-      {/* 제목과 초록 사이 구분선 (피그마 367:220 Divider) — 저자는 카드에 노출하지 않는다 */}
-      <div style={{ height: '1.2px', background: 'rgba(60,60,67,0.4)', width: '100%', flexShrink: 0 }} />
-
-      {/* 초록 (최대 3줄) — Pretendard Regular 12 / 행간 16 */}
-      <p style={{
-        ...CARD_BODY, color: INK_80, margin: 0,
-        minWidth: 0, overflowWrap: 'anywhere',
-        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
-        {paper.abstract}
-      </p>
-
-      {/* 분야 칩 목록 — 카드 높이가 고정이라 marginTop:auto 로 아래에 붙인다 */}
-      <div style={{ display: 'flex', gap: CHIP_GAP, flexWrap: 'wrap', marginTop: 'auto' }}>
-        {chips.map(chip => (
-          <span key={chip} style={{
-            fontSize: '11px', fontWeight: 500, lineHeight: '13px', color: MAIN_NAVY,
-            background: 'transparent', border: '1.2px solid rgba(0,23,142,0.4)',
-            borderRadius: '20px', padding: '6px 8px',
-          }}>
-            {chip}
-          </span>
-        ))}
-      </div>
-    </div>
+          {/* 아래로 향하는 꼬리 */}
+          <span style={{
+            position: 'absolute', top: '100%', left: `${TAIL_LEFT}px`,
+            width: 0, height: 0,
+            borderLeft: '7px solid transparent',
+            borderRight: '7px solid transparent',
+            borderTop: '9px solid #fff',
+            filter: 'drop-shadow(0 5px 3px rgba(15,23,42,0.06))',
+          }} />
+        </div>
+      )}
+    </span>
   )
 }
