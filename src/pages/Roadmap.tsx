@@ -3,6 +3,7 @@ import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../s
 import { useNavigate, useLocation } from "react-router-dom";
 import { createRoadmap, getMyRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
 import { getToken } from "../lib/auth";
+import { RoadmapSteps } from "./RoadmapHome";
 
 /* =========================================================
  *  대표색 (색 바꿀 땐 여기 두 줄만 수정)
@@ -403,11 +404,13 @@ export default function Roadmap() {
   return (
     <div style={pageBg}>
       <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "80px" }}>
-        <div style={{ marginBottom: HERO_GAP }}>
-          <h1 style={pageTitle}>내 로드맵, 지금 생성하기</h1>
-          <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
+        <div style={{ marginBottom: HERO_GAP, textAlign: "center" }}>
+          <h1 style={pageTitle}>로드맵 생성을 위해 먼저 준비 상태를 확인해볼까요?</h1>
+          <p style={pageSubtitle}>몇 가지 질문에 답하면 현재 준비도를 바탕으로 개인 맞춤형 로드맵을 만들어드려요</p>
           {loadError && <p style={{ fontSize: "13px", color: "#dc2626", marginTop: "8px" }}>{loadError}</p>}
         </div>
+
+        <RoadmapSteps />
 
         {!isLoggedIn && <PreviewNotice />}
 

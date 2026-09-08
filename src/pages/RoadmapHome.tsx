@@ -14,6 +14,51 @@ const STEPS = [
   { title: '성장 가이드', desc: '현재 준비도와 보완할 영역을 바탕으로 앞으로의 실천 방향을 제안해요.' },
 ]
 
+/* 4단계 소개 카드 — 랜딩/질문 화면에서 같이 씀 */
+export function RoadmapSteps() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        gap: '4px',
+        flexWrap: 'nowrap',
+        marginBottom: '56px',
+      }}>
+      {STEPS.map((step, i) => (
+        <div key={step.title} style={{ flex: '1 1 0', minWidth: 0 }}>
+          <div style={{ position: 'relative', width: '68px', height: '68px', margin: '0 auto', zIndex: 2 }}>
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#FFFFFF' }} />
+            <div
+              style={{
+                position: 'absolute',
+                inset: '8px',
+                borderRadius: '50%',
+                background: '#F5F9FF',
+                color: BRAND,
+                fontWeight: 700,
+                fontSize: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+              {i + 1}
+            </div>
+          </div>
+          <div style={{ background: '#fff', borderRadius: '36px', padding: '28px 18px 20px', marginTop: '-24px', textAlign: 'center' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, color: BRAND, margin: '0 0 8px' }}>
+              {step.title}
+            </h3>
+            <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, margin: 0 }}>
+              {step.desc}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* 로드맵 페이지의 첫 화면(랜딩) — 큰 버튼 2개
    생성 → 빈 질문 화면 / 수정 → 저장된 답 채운 질문 화면 */
 export default function RoadmapHome() {
@@ -60,43 +105,7 @@ export default function RoadmapHome() {
           현재 준비 상태를 바탕으로 전공·논문·성장 방향을 한 번에 정리해보세요!
         </p>
 
-        {/* 4단계 소개 카드 */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '32px',
-            flexWrap: 'nowrap',
-            marginBottom: '56px',
-          }}>
-          {STEPS.map((step, i) => (
-            <div key={step.title} style={{ flex: '1 1 0', minWidth: 0, maxWidth: '190px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  background: '#fff',
-                  color: BRAND,
-                  fontWeight: 700,
-                  fontSize: '15px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 12px',
-                  boxShadow: '0 2px 8px rgba(15,23,42,0.12)',
-                }}>
-                {i + 1}
-              </div>
-              <h3 style={{ fontSize: '15px', fontWeight: 700, color: BRAND, margin: '0 0 8px' }}>
-                {step.title}
-              </h3>
-              <p style={{ fontSize: '12.5px', color: '#64748b', lineHeight: 1.6, margin: 0 }}>
-                {step.desc}
-              </p>
-            </div>
-          ))}
-        </div>
+        <RoadmapSteps />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: 'fit-content', margin: '0 auto' }}>
           {/* 생성 → 빈 질문 화면 */}
