@@ -108,19 +108,21 @@ export default function RoadmapHome() {
         <RoadmapSteps />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: 'fit-content', margin: '0 auto' }}>
-          {/* 생성 → 빈 질문 화면 */}
-          <button
-            onClick={() => navigate('/roadmap/create')}
-            style={{
-              padding: '13px 28px',
-              background: BRAND,
-              color: '#fff',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: 'pointer',
-            }}>
-            로드맵 생성하러 가기
-          </button>
+          {/* 생성 → 빈 질문 화면 (이미 만든 로드맵이 있으면 생성 버튼은 숨김) */}
+          {!hasSaved && (
+            <button
+              onClick={() => navigate('/roadmap/create')}
+              style={{
+                padding: '13px 28px',
+                background: BRAND,
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer',
+              }}>
+              로드맵 생성하러 가기
+            </button>
+          )}
 
           {/* 수정 → 저장된 답 채운 질문 화면 (저장본 없으면 비활성) */}
           <button

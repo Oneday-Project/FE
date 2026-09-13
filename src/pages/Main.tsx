@@ -242,14 +242,12 @@ function NavCard({
   const blue = variant === "blue";
   return (
     <div
-      onClick={onClick}
       style={{
         position: "relative",
         flex: 1,
         background: blue ? "#dbe4fb" : "#eef1f5",
         borderRadius: "20px",
         padding: "22px 60px 22px 24px",
-        cursor: "pointer",
         transition: "0.15s",
         display: "flex",
         flexDirection: "column",
@@ -266,20 +264,22 @@ function NavCard({
       </div>
       {/* 아이콘 배지 */}
       <IconBadge>{icon}</IconBadge>
-      {/* 화살표 */}
-      <div
+      {/* 화살표 — 여기를 눌러야만 이동 */}
+      <button
+        onClick={onClick}
+        aria-label={title}
         style={{
           position: "absolute", right: "18px", top: "50%", transform: "translateY(-50%)",
           width: "34px", height: "34px", borderRadius: "50%",
           background: "#fff", boxShadow: "0 2px 8px rgba(15,23,42,0.10)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          color: BRAND,
+          color: BRAND, border: "none", cursor: "pointer", padding: 0,
         }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
           <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </div>
+      </button>
     </div>
   );
 }
@@ -288,10 +288,10 @@ function NavCard({
    저장된 로드맵 답변을 기반으로 방사형+점수 요약을 보여주고,
    "자세히 보기" 누르면 결과 페이지로(저장된 답 넘겨서) 이동 */
 const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
-  { key: "preparation", label: "이해도" },
+  { key: "interest", label: "이해도" },
   { key: "experience", label: "경험" },
   { key: "paper", label: "논문 루틴" },
-  { key: "interest", label: "관심 분야" },
+  { key: "preparation", label: "포트폴리오" },
   { key: "academic", label: "학업" },
 ];
 
