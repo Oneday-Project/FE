@@ -75,13 +75,13 @@ export default function PaperCard({
 
       <span style={{ fontSize: '11px', lineHeight: '13px', color: '#9ca3af' }}>{year}</span>
 
-      {/* 논문 제목 (최대 2줄) — Pretendard Medium 16 / 행간 19 */}
+      {/* 논문 제목 (전체 표시 — 제목이 가장 중요한 정보라 자르지 않는다) — Pretendard Medium 16 / 행간 19
+          카드 높이는 그리드가 한 줄 안에서 가장 긴 카드에 맞춰준다 */}
       <p style={{
         ...CARD_TITLE, color: INK, margin: 0,
         // 긴 단어가 그리드 컬럼 폭을 밀어내지 않도록 (카드 폭 균일 유지)
         minWidth: 0, overflowWrap: 'anywhere',
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      } as React.CSSProperties}>
+      }}>
         {paper.title}
       </p>
 
