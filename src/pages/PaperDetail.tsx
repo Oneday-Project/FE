@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { pageContainer, READ_STATUS_STYLE, MAIN } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import type { Paper } from './Papers'
@@ -107,35 +107,30 @@ export default function PaperDetail({
   const doiText = paper.doi || paper.arxivId || '-'
   const importance = clampStarTier(paper.starTier)
 
-  /* 함께 보면 좋은 논문 — 같은 분야를 먼저 보여준다.
-     추천 API(/similar)는 title·pdfUrl 정도만 내려줘서 카드에 필요한 초록·분야·연도가 없다.
-     그래서 추천 결과는 '순서 힌트'로만 쓰고, 카드에 채울 내용은 목록(allPapers)에서 가져온다. */
+  /* 함께 보면 좋은 논문 — 추천 API(/similar, 백엔드가 계산한 similarity 순) 결과를 순서 그대로 보여준다.
+     추천 응답은 title·pdfUrl 정도만 있어서, 카드 내용(초록·분야·연도)은 목록(allPapers)에서 찾고
+     목록에 없는 건 아래 effect 에서 상세 API로 채운다.
+     (예전엔 목록에 없는 추천을 버리고 분야 겹침으로 채워서 휴먼AI 논문 추천이 전부 빠졌었다)
+     추천 API가 실패했을 때만 분야가 많이 겹치는 순으로 대체한다. */
   const related = useMemo(() => {
-    const others = allPapers.filter(p => p.arxivId !== paper.arxivId)
-    const byId = new Map(others.map(p => [p.arxivId, p]))
+    const byId = new Map(allPapers.map(p => [p.arxivId, p]))
+    const recommended = similar
+      .filter(sp => sp.arxivId !== paper.arxivId)
+      .map(sp => byId.get(sp.arxivId) ?? sp)
+    if (recommended.length > 0) return recommended
+
     const myFields = new Set(getFieldNames(paper))
     const overlap = (p: Paper) => getFieldNames(p).filter(f => myFields.has(f)).length
-
-    // 추천 API 결과 중 목록에 있는 것 (내용이 채워지는 것만)
-    const recommended = similar
-      .map(sp => byId.get(sp.arxivId))
-      .filter((p): p is Paper => !!p)
-
-    // 분야가 겹치는 논문 — 많이 겹치는 순
-    const sameField = others
-      .filter(p => overlap(p) > 0)
+    return allPapers
+      .filter(p => p.arxivId !== paper.arxivId)
       .sort((a, b) => overlap(b) - overlap(a))
-
-    // 추천 → 같은 분야 → 나머지 순으로 중복 없이 이어붙인다
-    const seen = new Set<string>()
-    const ordered: Paper[] = []
-    for (const p of [...recommended, ...sameField, ...others]) {
-      if (seen.has(p.arxivId)) continue
-      seen.add(p.arxivId)
-      ordered.push(p)
-    }
-    return ordered
   }, [similar, allPapers, paper])
+
+  // 추천 effect 가 allPapers 변화마다 재요청하지 않도록 최신 목록은 ref 로 본다
+  const allPapersRef = useRef(allPapers)
+  useEffect(() => {
+    allPapersRef.current = allPapers
+  }, [allPapers])
   const relatedPageCount = Math.max(1, Math.ceil(related.length / 3))
   const relatedPapers = related.slice(relatedPage * 3, relatedPage * 3 + 3)
 
@@ -156,18 +151,27 @@ export default function PaperDetail({
     ;(async () => {
       try {
         const token = getToken()
-        const res = await fetch(url, {
-          headers: {
-            Accept: 'application/json',
-            'ngrok-skip-browser-warning': 'true',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        })
+        const headers = {
+          Accept: 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+        const res = await fetch(url, { headers })
         if (!res.ok || cancelled) return
 
         const json = await res.json()
         const list: unknown[] = Array.isArray(json) ? json : json.data ?? []
-        setSimilar(list.map(toRelatedPaper).filter((p): p is Paper => p !== null))
+        const items = list.map(toRelatedPaper).filter((p): p is Paper => p !== null)
+        setSimilar(items)
+
+        // 목록에 없는 추천 논문은 카드 내용이 비어 있으므로 상세 API로 채운다
+        const known = new Set(allPapersRef.current.map(p => p.arxivId))
+        const missing = items.filter(p => !known.has(p.arxivId))
+        if (missing.length === 0) return
+        const filled = await Promise.all(missing.map(p => fetchRelatedDetail(p, headers)))
+        if (cancelled) return
+        const filledById = new Map(filled.filter((p): p is Paper => p !== null).map(p => [p.arxivId, p]))
+        setSimilar(prev => prev.map(p => filledById.get(p.arxivId) ?? p))
       } catch {
         // 실패 시 목록 기반 대체가 자동으로 쓰임
       }
@@ -177,7 +181,7 @@ export default function PaperDetail({
   }, [paper.arxivId])
 
   /*
-    AI 요약: GET /ai-services/papers/{arxivId}
+    AI 요약: GET /ai-services/papers/{arxivId}  (휴먼AI 논문은 GET /ai-services/hai-papers/{id})
       whyRead → "이 논문을 왜 읽어야 할까요?"
       abstractKor → Abstract KO
       what / how / impact → Key Takeaways
@@ -196,7 +200,11 @@ export default function PaperDetail({
     ;(async () => {
       try {
         const token = getToken()
-        const res = await fetch(`/api/ai-services/papers/${encodeURIComponent(arxivId)}`, {
+        // 휴먼AI 논문은 별도 라우트 (예전엔 /ai-services/papers/hai-6 으로 불러 항상 fallback 이 떴다)
+        const aiUrl = arxivId.startsWith('hai-')
+          ? `/api/ai-services/hai-papers/${encodeURIComponent(arxivId.slice(4))}`
+          : `/api/ai-services/papers/${encodeURIComponent(arxivId)}`
+        const res = await fetch(aiUrl, {
           headers: {
             Accept: 'application/json',
             'ngrok-skip-browser-warning': 'true',
@@ -212,8 +220,10 @@ export default function PaperDetail({
           return
         }
 
-        const data: PaperAiSummary = await res.json()
+        const json = await res.json()
         if (cancelled) return
+        // 휴먼AI 라우트 응답 형태를 아직 확인 못 해서 { data: ... } 로 감싸진 경우도 흡수한다
+        const data: PaperAiSummary = json?.data ?? json
 
         const fallback = buildFallbackAIContent(paper)
         setAi({
@@ -892,6 +902,31 @@ function toRelatedPaper(raw: unknown): Paper | null {
     pdfUrl: (r.pdfUrl as string) ?? '',
     bookmarkCount: r.isBookmark || (r.bookmarkCount as number) > 0 ? 1 : 0,
     starTier: (r.starTier as number) ?? 0,
+  }
+}
+
+/* 추천 카드 내용 채우기 — 일반 논문은 GET /papers/paper/{arxivId} 응답이 Paper 형태 그대로,
+   휴먼AI 논문은 GET /papers/hai-papers/{id} 응답(HaiPaper)을 Papers.tsx 의 toPaper 와 같은 규칙으로 변환 */
+async function fetchRelatedDetail(p: Paper, headers: Record<string, string>): Promise<Paper | null> {
+  const isHai = p.arxivId.startsWith('hai-')
+  const url = isHai
+    ? `/api/papers/hai-papers/${encodeURIComponent(p.arxivId.slice(4))}`
+    : `/api/papers/paper/${encodeURIComponent(p.arxivId)}`
+  try {
+    const res = await fetch(url, { headers })
+    if (!res.ok) return null
+    const raw = await res.json()
+    if (!isHai) return { ...p, ...raw, arxivId: p.arxivId }
+    return {
+      ...p,
+      doi: raw.doi ?? p.doi,
+      authors: raw.authors ?? [],
+      abstract: raw.abstract ?? '',
+      researchFields: raw.researchFields ?? (raw.department ? [raw.department] : []),
+      publishedDate: raw.publishedYear ? `${raw.publishedYear}-01-01` : '',
+    }
+  } catch {
+    return null
   }
 }
 
