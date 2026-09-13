@@ -449,7 +449,7 @@ export default function Papers() {
       return (
         <PaperDetail
           paper={selectedPaper}
-          allPapers={papers}
+          allPapers={[...papers, ...haiPapers]}
           onBack={() => setSearchParams({})}
         />
       )
