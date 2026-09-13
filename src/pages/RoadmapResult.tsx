@@ -130,23 +130,14 @@ function SectionCard({ label, children, style }: { label: string; children: Reac
 
 const sectionDesc: CSSProperties = { fontSize: "14px", fontWeight: 600, color: "#334155", marginBottom: "22px" };
 
-/* 방사형 축 — 백엔드 radar 응답 키 순서 고정 (preparation/experience/paper/interest/academic) */
+/* 방사형 축 — interest(Q3·Q4 이해도)/preparation(Q9·Q10 포트폴리오)를 라벨과 맞춰 매핑 */
 const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
-  { key: "preparation", label: "이해도" },
+  { key: "interest", label: "이해도" },
   { key: "experience", label: "경험" },
   { key: "paper", label: "논문 루틴" },
-  { key: "interest", label: "관심 분야" },
+  { key: "preparation", label: "포트폴리오" },
   { key: "academic", label: "학업" },
 ];
-
-/* 성장 가이드 "현재 상태" 카드용 — 답변의 숫자 점수(0/2.5/5/7.5/10)를 설문 문구로 역변환
-   Roadmap.tsx 의 q5·q7 보기와 동일한 순서 */
-const Q5_LABELS = ["0회", "1~3회", "3~5회", "5~8회", "10회 이상"];
-const Q7_LABELS = ["없음", "1~3편", "4~10편", "11~20편", "20편 이상"];
-const labelOf = (labels: string[], score: unknown) => {
-  if (typeof score !== "number") return "-";
-  return labels[Math.round(score / 2.5)] ?? "-";
-};
 
 /* 과목 칩 — 호버 시 description 말풍선 (추천/일반 상관없이 표시) */
 function CourseChip({ course }: { course: MajorCourse }) {
@@ -231,7 +222,6 @@ export default function RoadmapResult() {
   const [nickname, setNickname] = useState("");
   const [analysis, setAnalysis] = useState<RoadmapAnalysis | null>(null);
   const [initialAnalysis, setInitialAnalysis] = useState<RoadmapAnalysis | null>(null);
-  const [answers, setAnswers] = useState<Record<string, unknown> | null>(null);
   const [majorCourses, setMajorCourses] = useState<MajorCoursesResponse | null>(null);
 
   useEffect(() => {
@@ -253,7 +243,6 @@ export default function RoadmapResult() {
 
         setNickname(me?.nickname ?? "");
         setAnalysis(mine.latest.result);
-        setAnswers(mine.latest.answers);
         // 최초 로드맵과 최근 로드맵이 다른 스냅샷일 때만 비교용으로 사용 (한 번만 만든 경우엔 겹쳐 그릴 필요 없음)
         setInitialAnalysis(mine.initial && mine.initial.createdAt !== mine.latest.createdAt ? mine.initial.result : null);
         setMajorCourses(majors);
@@ -292,8 +281,6 @@ export default function RoadmapResult() {
   }
 
   const tags = analysis.overview.interestFields ?? [];
-  const paperFreq = labelOf(Q7_LABELS, answers?.q7);
-  const extracurricular = labelOf(Q5_LABELS, answers?.q5);
   const commentLines = analysis.overview.comment.split("\n");
 
   return (
@@ -395,14 +382,14 @@ export default function RoadmapResult() {
             )}
           </SectionCard>
 
-          {/* ── 논문 로드맵 (추천 데이터는 백엔드 준비 중 — 관심 분야 태그만 우선 표시) ── */}
+          {/* ── 논문 로드맵 ── */}
           <SectionCard label="논문 로드맵">
             <p style={sectionDesc}>선택한 관심 분야에 대한 핵심 논문 추천 결과입니다.</p>
             <div style={{ display: "flex", gap: "24px" }}>
               {[0, 1, 2].map((i) => {
-                const tag = tags[i];
+                const item = analysis.paperRoadmap[i];
 
-                if (!tag) {
+                if (!item) {
                   return (
                     <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: "3px solid #c7d2fe", display: "flex", flexDirection: "column", minHeight: "200px" }}>
                       <span style={{ alignSelf: "flex-start", padding: "4px 16px", borderRadius: "999px", fontSize: "13px", border: "1.5px dashed #cbd5e1", color: "#cbd5e1", fontWeight: 700, marginBottom: "12px" }}>-</span>
@@ -413,32 +400,46 @@ export default function RoadmapResult() {
                   );
                 }
 
+                const paper = item.paper;
+
                 return (
-                  <div key={i} style={{ flex: 1, paddingLeft: "16px", borderLeft: `3px solid ${BRAND}`, display: "flex", flexDirection: "column", minHeight: "200px" }}>
-                    <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 700, marginBottom: "12px" }}>{tag}</span>
-                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
-                      <p style={{ fontSize: "12.5px", color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>
-                        추천 논문을 준비하고 있어요.<br />곧 만나보실 수 있어요!
-                      </p>
-                    </div>
+                  <div
+                    key={i}
+                    onClick={() => paper && navigate(`/papers?paper=${encodeURIComponent(paper.arxivId)}`)}
+                    style={{ flex: 1, paddingLeft: "16px", borderLeft: `3px solid ${BRAND}`, display: "flex", flexDirection: "column", minHeight: "200px", cursor: paper ? "pointer" : "default" }}
+                  >
+                    <span style={{ alignSelf: "flex-start", display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "12px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 700, marginBottom: "12px" }}>{item.tag}</span>
+                    {paper ? (
+                      <>
+                        <p style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", lineHeight: 1.5, margin: "0 0 6px" }}>{paper.title}</p>
+                        <span style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "10px" }}>{paper.publishedDate?.slice(0, 4)}</span>
+                        <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6, margin: 0 }}>{paper.aiSummary.cardSummary}</p>
+                      </>
+                    ) : (
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+                        <p style={{ fontSize: "12.5px", color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>
+                          추천 논문을 준비하고 있어요.<br />곧 만나보실 수 있어요!
+                        </p>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </SectionCard>
 
-          {/* ── 성장 가이드 (Tip 은 백엔드 준비 중 — 현재 상태 카드만 실데이터) ── */}
+          {/* ── 성장 가이드 ── */}
           <SectionCard label="성장 가이드">
             <div style={{ display: "flex", alignItems: "stretch", gap: "18px", flexWrap: "wrap" }}>
               {/* 현재 상태 카드 2개 */}
               <div style={{ display: "flex", flexDirection: "column", gap: "14px", flex: "0 0 200px" }}>
                 <div style={{ border: "1.5px solid #e2e8f0", borderRadius: "14px", padding: "16px 18px", textAlign: "center" }}>
                   <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 8px" }}>📑 현재 논문 역량</p>
-                  <b style={{ fontSize: "24px", color: "#0f172a" }}>월 {paperFreq}</b>
+                  <b style={{ fontSize: "24px", color: "#0f172a" }}>{analysis.growthGuide.paperFrequency}</b>
                 </div>
                 <div style={{ border: "1.5px solid #e2e8f0", borderRadius: "14px", padding: "16px 18px", textAlign: "center" }}>
                   <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 8px" }}>🏆 현재 대외 경험</p>
-                  <b style={{ fontSize: "24px", color: "#0f172a" }}>{extracurricular}</b>
+                  <b style={{ fontSize: "24px", color: "#0f172a" }}>{analysis.growthGuide.externalActivity}</b>
                 </div>
               </div>
               {/* 셰브론 */}
@@ -448,12 +449,16 @@ export default function RoadmapResult() {
                   <path d="M20 6 L34 22 L20 38" stroke="#a5b4fc" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              {/* Tip 박스 */}
-              <div style={{ flex: 1, minWidth: "280px", background: "#f5f8ff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "20px 22px", display: "flex", alignItems: "center" }}>
-                <p style={{ margin: 0, fontSize: "13px", color: "#475569", lineHeight: 1.7 }}>
-                  <span style={{ color: "#ef4444", border: "1.5px solid #ef4444", borderRadius: "6px", padding: "1px 7px", fontSize: "12px", marginRight: "8px" }}>Tip!</span>
-                  맞춤 성장 가이드를 준비하고 있어요. 곧 만나보실 수 있어요!
-                </p>
+              {/* Tip 박스 2개 */}
+              <div style={{ flex: 1, minWidth: "280px", display: "flex", flexDirection: "column", gap: "12px", justifyContent: "center" }}>
+                {analysis.growthGuide.tips.map((tip, i) => (
+                  <div key={i} style={{ background: "#f5f8ff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "16px 20px" }}>
+                    <p style={{ margin: 0, fontSize: "13px", color: "#475569", lineHeight: 1.7 }}>
+                      <span style={{ color: "#ef4444", border: "1.5px solid #ef4444", borderRadius: "6px", padding: "1px 7px", fontSize: "12px", marginRight: "8px" }}>Tip!</span>
+                      {tip}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
           </SectionCard>

@@ -40,7 +40,25 @@ export type RoadmapOverview = {
   comment: string
 }
 
-// major/paper/growth 는 백엔드에서 아직 항상 빈 배열로 옴 — 형태 확정 전까지 unknown[] 로 둠
+// 논문 로드맵 카드 하나 — paper 가 null 이면 해당 분야 추천 논문이 아직 없는 것 (그 분야 태그는 tag 로 옴)
+export type PaperRoadmapItem = {
+  tag: string
+  paper: {
+    arxivId: string
+    title: string
+    publishedDate: string
+    aiSummary: { cardSummary: string }
+  } | null
+}
+
+// 성장 가이드 — paperFrequency/externalActivity 는 이미 포맷된 문구, tips 는 항상 2개 보장
+export type GrowthGuide = {
+  paperFrequency: string
+  externalActivity: string
+  tips: string[]
+}
+
+// major/paper/growth 는 백엔드에서 아직 항상 빈 배열로 옴 — 형태 확정 전까지 unknown[] 로 둠 (화면 미사용)
 export type RoadmapAnalysis = {
   overview: RoadmapOverview
   radar: RoadmapRadar
@@ -51,6 +69,8 @@ export type RoadmapAnalysis = {
     paper: unknown[]
     growth: unknown[]
   }
+  paperRoadmap: PaperRoadmapItem[]
+  growthGuide: GrowthGuide
 }
 
 export type RoadmapSnapshot = {
