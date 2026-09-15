@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useSyncExternalStore, type ReactN
 import { pageContainer, READ_STATUS_STYLE, MAIN } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import type { Paper } from './Papers'
-import { getToken } from '../lib/auth'
+import { apiFetch } from '../lib/auth'
 import PaperCard from '../components/PaperCard'
 import bookCloseIcon from '../components/akar-icons_book-close.png'
 import bookOpenIcon from '../components/akar-icons_book.png'
@@ -150,13 +150,8 @@ export default function PaperDetail({
 
     ;(async () => {
       try {
-        const token = getToken()
-        const headers = {
-          Accept: 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        }
-        const res = await fetch(url, { headers })
+        // apiFetch: accessToken 이 만료돼 401 이 나면 재발급 후 다시 요청한다
+        const res = await apiFetch(url)
         if (!res.ok || cancelled) return
 
         const json = await res.json()
@@ -168,7 +163,7 @@ export default function PaperDetail({
         const known = new Set(allPapersRef.current.map(p => p.arxivId))
         const missing = items.filter(p => !known.has(p.arxivId))
         if (missing.length === 0) return
-        const filled = await Promise.all(missing.map(p => fetchRelatedDetail(p, headers)))
+        const filled = await Promise.all(missing.map(fetchRelatedDetail))
         if (cancelled) return
         const filledById = new Map(filled.filter((p): p is Paper => p !== null).map(p => [p.arxivId, p]))
         setSimilar(prev => prev.map(p => filledById.get(p.arxivId) ?? p))
@@ -199,18 +194,13 @@ export default function PaperDetail({
 
     ;(async () => {
       try {
-        const token = getToken()
         // 휴먼AI 논문은 별도 라우트 (예전엔 /ai-services/papers/hai-6 으로 불러 항상 fallback 이 떴다)
         const aiUrl = arxivId.startsWith('hai-')
           ? `/api/ai-services/hai-papers/${encodeURIComponent(arxivId.slice(4))}`
           : `/api/ai-services/papers/${encodeURIComponent(arxivId)}`
-        const res = await fetch(aiUrl, {
-          headers: {
-            Accept: 'application/json',
-            'ngrok-skip-browser-warning': 'true',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        })
+        // apiFetch: accessToken(약 1시간) 만료로 401 이 나면 재발급 후 다시 요청한다.
+        // (그냥 fetch 를 쓰면 로그인 상태인데도 한 시간 뒤부터 전부 임시 문구가 떴다)
+        const res = await apiFetch(aiUrl)
 
         if (cancelled) return
 
@@ -907,13 +897,13 @@ function toRelatedPaper(raw: unknown): Paper | null {
 
 /* 추천 카드 내용 채우기 — 일반 논문은 GET /papers/paper/{arxivId} 응답이 Paper 형태 그대로,
    휴먼AI 논문은 GET /papers/hai-papers/{id} 응답(HaiPaper)을 Papers.tsx 의 toPaper 와 같은 규칙으로 변환 */
-async function fetchRelatedDetail(p: Paper, headers: Record<string, string>): Promise<Paper | null> {
+async function fetchRelatedDetail(p: Paper): Promise<Paper | null> {
   const isHai = p.arxivId.startsWith('hai-')
   const url = isHai
     ? `/api/papers/hai-papers/${encodeURIComponent(p.arxivId.slice(4))}`
     : `/api/papers/paper/${encodeURIComponent(p.arxivId)}`
   try {
-    const res = await fetch(url, { headers })
+    const res = await apiFetch(url)
     if (!res.ok) return null
     const raw = await res.json()
     if (!isHai) return { ...p, ...raw, arxivId: p.arxivId }

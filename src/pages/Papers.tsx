@@ -3,7 +3,7 @@ import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP, INK, INK_80
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PaperDetail from './PaperDetail'
 import PaperCard from '../components/PaperCard'
-import { isLoggedIn, getToken } from '../lib/auth'
+import { isLoggedIn, getToken, apiFetch } from '../lib/auth'
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from '../lib/bookmarks'
 
 /* 분야 태그 — 피그마와 같은 줄 구성으로 고정한다.
@@ -423,7 +423,8 @@ export default function Papers() {
         : `${API_PREFIX}/papers/paper/${encodeURIComponent(paperParam)}`
 
       try {
-        const res = await fetch(url, { headers: authHeaders() })
+        // 단건 조회는 인증 필요 — apiFetch 로 보내야 accessToken 만료(401) 시 재발급 후 다시 요청한다
+        const res = await apiFetch(url)
         if (!res.ok || cancelled) return
         const raw = await res.json()
         setFetchedPaper(isHai ? toPaper(raw) : raw)
@@ -927,7 +928,9 @@ function PaperSection({
     <div style={{ marginBottom: '8px' }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: '1.5px solid #e5e7eb', paddingBottom: '14px', marginBottom: '24px',
+        borderBottom: '1.5px solid #e5e7eb', paddingBottom: '14px',
+        // 아래 카드 줄은 화살표 자리(좌우 40px) 안쪽에서 시작하므로, 제목·구분선도 같은 폭으로 맞춘다
+        margin: '0 40px 24px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1a1a1a', margin: 0 }}>{title}</h2>
