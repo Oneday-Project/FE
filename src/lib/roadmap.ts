@@ -47,7 +47,7 @@ export type PaperRoadmapItem = {
     arxivId: string
     title: string
     publishedDate: string
-    aiSummary: { cardSummary: string }
+    aiSummary: { cardSummary: string } | null
   } | null
 }
 
