@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
+import { Component, useEffect, useState, type ReactNode, type CSSProperties } from "react";
 import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from "react-router-dom";
 import { fetchMe } from "../lib/auth";
@@ -129,6 +129,29 @@ function SectionCard({ label, children, style }: { label: string; children: Reac
 }
 
 const sectionDesc: CSSProperties = { fontSize: "14px", fontWeight: 600, color: "#334155", marginBottom: "22px" };
+
+/* 백엔드가 예상과 다른 값(필드 누락/null 등)을 줘도 그 섹션만 "준비 중" 문구로 대체하고
+   페이지 전체가 하얗게 깨지는 걸 막는 안전망 */
+type SectionBoundaryState = { hasError: boolean };
+
+class SectionBoundary extends Component<{ fallback: string; children: ReactNode }, SectionBoundaryState> {
+  state: SectionBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("로드맵 결과 섹션을 그리는 중 오류:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", padding: "24px 0" }}>{this.props.fallback}</p>;
+    }
+    return this.props.children;
+  }
+}
 
 /* 방사형 축 — interest(Q3·Q4 이해도)/preparation(Q9·Q10 포트폴리오)를 라벨과 맞춰 매핑 */
 const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
@@ -297,6 +320,7 @@ export default function RoadmapResult() {
         <div style={{ display: "flex", flexDirection: "column", gap: "44px" }}>
           {/* ── 종합 코멘트 ── */}
           <SectionCard label="종합 코멘트">
+            <SectionBoundary fallback="종합 코멘트를 준비하고 있어요. 곧 만나보실 수 있어요!">
             <div style={{ display: "flex", alignItems: "center", gap: "28px", flexWrap: "wrap" }}>
               <div style={{ flex: "0 0 280px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
                 <RadarChart
@@ -338,11 +362,13 @@ export default function RoadmapResult() {
                 </p>
               </div>
             </div>
+            </SectionBoundary>
           </SectionCard>
 
           {/* ── 전공 로드맵 ── */}
           <SectionCard label="전공 로드맵">
             <p style={sectionDesc}>관심 분야에 따라 추천된 전공 과목 내역입니다.</p>
+            <SectionBoundary fallback="전공 로드맵을 불러오지 못했어요.">
             {majorCourses && majorCourses.years.length > 0 ? (
               <>
                 <div style={{ display: "flex", gap: "20px" }}>
@@ -380,11 +406,13 @@ export default function RoadmapResult() {
             ) : (
               <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", padding: "24px 0" }}>전공 로드맵을 불러오지 못했어요.</p>
             )}
+            </SectionBoundary>
           </SectionCard>
 
           {/* ── 논문 로드맵 ── */}
           <SectionCard label="논문 로드맵">
             <p style={sectionDesc}>선택한 관심 분야에 대한 핵심 논문 추천 결과입니다.</p>
+            <SectionBoundary fallback="추천 논문을 준비하고 있어요. 곧 만나보실 수 있어요!">
             <div style={{ display: "flex", gap: "24px" }}>
               {[0, 1, 2].map((i) => {
                 const item = analysis.paperRoadmap[i];
@@ -413,7 +441,7 @@ export default function RoadmapResult() {
                       <>
                         <p style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", lineHeight: 1.5, margin: "0 0 6px" }}>{paper.title}</p>
                         <span style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "10px" }}>{paper.publishedDate?.slice(0, 4)}</span>
-                        <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6, margin: 0 }}>{paper.aiSummary.cardSummary}</p>
+                        <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6, margin: 0 }}>{paper.aiSummary?.cardSummary ?? "논문 요약을 준비하고 있어요."}</p>
                       </>
                     ) : (
                       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
@@ -426,10 +454,12 @@ export default function RoadmapResult() {
                 );
               })}
             </div>
+            </SectionBoundary>
           </SectionCard>
 
           {/* ── 성장 가이드 ── */}
           <SectionCard label="성장 가이드">
+            <SectionBoundary fallback="맞춤 성장 가이드를 준비하고 있어요. 곧 만나보실 수 있어요!">
             <div style={{ display: "flex", alignItems: "stretch", gap: "18px", flexWrap: "wrap" }}>
               {/* 현재 상태 카드 2개 */}
               <div style={{ display: "flex", flexDirection: "column", gap: "14px", flex: "0 0 200px" }}>
@@ -461,7 +491,18 @@ export default function RoadmapResult() {
                 ))}
               </div>
             </div>
+            </SectionBoundary>
           </SectionCard>
+        </div>
+
+        {/* 수정하러 가기 — 결과 맨 아래, 처음에 답했던 설문 화면으로 이동해 수정 */}
+        <div style={{ textAlign: "right", marginTop: "32px" }}>
+          <button
+            onClick={() => navigate("/roadmap/create", { state: { edit: true } })}
+            style={{ padding: "12px 24px", background: "#e6e9f5", color: BRAND, border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+          >
+            로드맵 수정하러 가기
+          </button>
         </div>
       </div>
     </div>

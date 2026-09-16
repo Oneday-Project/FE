@@ -64,19 +64,28 @@ export function RoadmapSteps() {
 export default function RoadmapHome() {
   const navigate = useNavigate()
 
-  // 저장된 로드맵이 있어야 "수정하러 가기" 활성화 — GET /roadmap/me 로 확인
-  const [hasSaved, setHasSaved] = useState(false)
+  // 로그인했고 로드맵이 이미 있으면 이 랜딩은 건너뛰고 결과 페이지로 바로 이동
+  const [checking, setChecking] = useState(!!getToken())
 
   useEffect(() => {
     if (!getToken()) return
     let cancelled = false
 
     getMyRoadmap()
-      .then((res) => { if (!cancelled) setHasSaved(res.hasRoadmap) })
-      .catch(() => { if (!cancelled) setHasSaved(false) })
+      .then((res) => {
+        if (cancelled) return
+        if (res.hasRoadmap) {
+          navigate('/roadmap-result', { replace: true })
+          return
+        }
+        setChecking(false)
+      })
+      .catch(() => { if (!cancelled) setChecking(false) })
 
     return () => { cancelled = true }
-  }, [])
+  }, [navigate])
+
+  if (checking) return null
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>
@@ -107,37 +116,19 @@ export default function RoadmapHome() {
 
         <RoadmapSteps />
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: 'fit-content', margin: '0 auto' }}>
-          {/* 생성 → 빈 질문 화면 (이미 만든 로드맵이 있으면 생성 버튼은 숨김) */}
-          {!hasSaved && (
-            <button
-              onClick={() => navigate('/roadmap/create')}
-              style={{
-                padding: '13px 28px',
-                background: BRAND,
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                cursor: 'pointer',
-              }}>
-              로드맵 생성하러 가기
-            </button>
-          )}
-
-          {/* 수정 → 저장된 답 채운 질문 화면 (저장본 없으면 비활성) */}
+        <div style={{ width: 'fit-content', margin: '0 auto' }}>
+          {/* 이 화면은 비로그인 또는 로드맵 미생성 상태에서만 보임 — 생성 버튼만 필요 */}
           <button
-            disabled={!hasSaved}
-            onClick={() => hasSaved && navigate('/roadmap/create', { state: { edit: true } })}
+            onClick={() => navigate('/roadmap/create')}
             style={{
               padding: '13px 28px',
-              background: hasSaved ? '#e6e9f5' : '#e9ecef',
-              color: hasSaved ? BRAND : '#adb5bd',
+              background: BRAND,
+              color: '#fff',
               border: 'none',
               borderRadius: '10px',
-              fontWeight: hasSaved ? 600 : 400,
-              cursor: hasSaved ? 'pointer' : 'not-allowed',
+              cursor: 'pointer',
             }}>
-            로드맵 수정하러 가기
+            로드맵 생성하러 가기
           </button>
         </div>
       </div>

@@ -474,8 +474,8 @@ export default function Roadmap() {
           })}
         </div>
 
-        {/* 제출 버튼 */}
-        <div style={{ marginTop: "48px", textAlign: "center" }}>
+        {/* 제출 버튼 — 수정 모드면 오른쪽 정렬 + "수정 결과 저장하기" */}
+        <div style={{ marginTop: "48px", textAlign: isEditMode ? "right" : "center" }}>
           <button
             disabled={!isAllAnswered || submitting}
             onClick={handleSubmit}
@@ -492,7 +492,7 @@ export default function Roadmap() {
               opacity: submitting ? 0.7 : 1,
             }}
           >
-            {submitting ? "저장하는 중..." : "로드맵 생성하러 가기"}
+            {submitting ? "저장하는 중..." : isEditMode ? "수정 결과 저장하기" : "로드맵 생성하러 가기"}
           </button>
           {submitError && (
             <p style={{ marginTop: "12px", fontSize: "13px", color: "#dc2626" }}>{submitError}</p>
