@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate, useLocation } from "react-router-dom";
 import { createRoadmap, getMyRoadmap, updateRoadmap, type RoadmapPayload } from "../lib/roadmap";
-import { getToken } from "../lib/auth";
 import { RoadmapSteps } from "./RoadmapHome";
 
 /* =========================================================
@@ -164,6 +163,58 @@ function Chip({ label, selected, disabled, onToggle }: { label: string; selected
   );
 }
 
+/* Q2(관심분야) 카드 오른쪽 아래 — "분야 ⓘ" 호버 시 태그 뜻 설명 말풍선 */
+const FIELD_GLOSSARY: { tag: string; desc: string }[] = [
+  { tag: "SML (Statistical Machine Learning)", desc: "통계와 확률을 기반으로 데이터의 패턴을 학습하고 예측하는 분야" },
+  { tag: "ML (Machine Learning)", desc: "데이터를 학습해 분류, 예측, 의사결정을 수행하는 AI 분야" },
+  { tag: "CV (Computer Vision)", desc: "이미지와 영상을 이해하고 분석하는 AI 분야" },
+  { tag: "NLP (Natural Language Processing)", desc: "텍스트와 언어를 이해하고 분석·생성하는 AI 분야" },
+  { tag: "Robotics (Robotics)", desc: "로봇이 환경을 인식하고 판단하며 행동하도록 연구하는 분야" },
+  { tag: "Retrieval AI (Retrieval Artificial Intelligence)", desc: "대규모 데이터에서 필요한 정보를 검색하고 활용하는 AI 분야" },
+  { tag: "SAP (Speech and Audio Processing)", desc: "음성과 소리 데이터를 인식하고 분석·처리하는 AI 분야" },
+  { tag: "HCI (Human–Computer Interaction)", desc: "사람과 컴퓨터·AI 사이의 상호작용과 사용자 경험을 연구하는 분야" },
+  { tag: "Multimodal (Multimodal Artificial Intelligence)", desc: "텍스트, 이미지, 음성 등 여러 형태의 데이터를 함께 이해하는 AI 분야" },
+  { tag: "Code AI (AI for Code / Code Intelligence)", desc: "코드를 이해하고 생성·분석하며 개발을 지원하는 AI 분야" },
+];
+
+function FieldGlossaryHint() {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      style={{ position: "absolute", bottom: "14px", right: "20px" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {hover && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 10px)", right: 0,
+            width: "max-content", maxWidth: "min(90vw, 720px)",
+            background: "#fff", border: "1px solid #e2e8f0",
+            boxShadow: "0 8px 22px rgba(15,23,42,0.14)", borderRadius: "12px",
+            padding: "16px 18px", zIndex: 30, textAlign: "left",
+          }}
+        >
+          {/* 말풍선 꼬리 — 트리거("분야 ⓘ") 쪽을 가리키도록 위쪽에 배치 */}
+          <div style={{ position: "absolute", top: "-7px", right: "18px", width: 0, height: 0, borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: "7px solid #fff", filter: "drop-shadow(0 -2px 1px rgba(15,23,42,0.06))" }} />
+          {FIELD_GLOSSARY.map(({ tag, desc }) => (
+            <p key={tag} style={{ fontSize: "12px", lineHeight: 1.6, color: "#475569", margin: "0 0 8px", whiteSpace: "nowrap" }}>
+              <b style={{ color: "#1e293b" }}>{tag}</b>: {desc}
+            </p>
+          ))}
+        </div>
+      )}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, color: "#1e293b" }}>
+        분야
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="M12 11v5.5M12 8v.01" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
 /* =========================================================
  *  선택지 레이아웃 (가운데 정렬)
  *  - Q1(8개): 4열 2행, 열 기준 채움 → 윗줄 1학기 / 아랫줄 2학기
@@ -223,22 +274,88 @@ function OptionsField({
   return <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "6px 28px" }}>{q.options.map((opt) => renderOpt(opt))}</div>;
 }
 
-function PreviewNotice() {
+/* RoadmapSteps 아래 안내 줄 — 왼쪽: 최초 로드맵은 수정 불가 안내, 오른쪽: 결과 미리보기 팝업 열기 */
+function RoadmapNoticeRow({ onPreviewClick }: { onPreviewClick: () => void }) {
   return (
-    <div style={{ display: "flex", borderLeft: `3px solid ${BRAND}`, padding: "2px 0 2px 16px", marginBottom: "32px" }}>
-      <div>
-        <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", fontWeight: 700, color: BRAND, margin: "0 0 6px" }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={BRAND} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="9.5" />
-            <path d="M12 11v5.5M12 8v.01" />
+    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "32px" }}>
+      <div style={{ flex: "6 1 280px", background: "#fff", borderRadius: "14px", padding: "12px 20px", boxShadow: "0 4px 16px rgba(15,23,42,0.05)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <p style={{ color: "#ef4444", fontWeight: 700, fontSize: "13.5px", margin: "0 0 2px" }}>최초 로드맵은 생성 후 수정할 수 없습니다.</p>
+        <p style={{ color: "#1e293b", fontSize: "13px", lineHeight: 1.4, margin: 0 }}>첫 로드맵 생성 결과는 이후 로드맵과의 변화 비교를 위한 기준으로 저장됩니다.</p>
+      </div>
+
+      <button
+        onClick={onPreviewClick}
+        style={{ flex: "4 1 220px", display: "flex", alignItems: "center", gap: "14px", background: "#fff", borderRadius: "14px", padding: "10px 20px", boxShadow: "0 4px 16px rgba(15,23,42,0.05)", border: "none", cursor: "pointer", textAlign: "left" }}
+      >
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <defs>
+            <linearGradient id="previewIconGradient" gradientUnits="userSpaceOnUse" x1="2.5" y1="2.5" x2="21.5" y2="21.5">
+              <stop offset="0%" stopColor={BRAND} />
+              <stop offset="100%" stopColor="#7f9bec" />
+            </linearGradient>
+          </defs>
+          <circle cx="12" cy="12" r="9.5" stroke="url(#previewIconGradient)" />
+          <path d="M12 11v5.5M12 8v.01" stroke="url(#previewIconGradient)" />
+        </svg>
+        <div style={{ flex: 1 }}>
+          <p
+            style={{
+              fontWeight: 700,
+              fontSize: "13.5px",
+              margin: "0 0 2px",
+              background: `linear-gradient(90deg, ${BRAND} 0%, #7f9bec 100%)`,
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+            }}
+          >
+            로드맵 생성 미리보기
+          </p>
+          <p style={{ fontSize: "12.5px", color: "#64748b", margin: 0 }}>어떤 결과를 받을 수 있나요?</p>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+          <path d="M9 6l6 6-6 6" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/* 결과 미리보기 이미지 팝업 */
+function PreviewImageModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", zIndex: 100 }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }}>
+        <button
+          onClick={onClose}
+          aria-label="닫기"
+          style={{
+            position: "absolute", top: "12px", right: "12px",
+            width: "32px", height: "32px", borderRadius: "50%",
+            background: "rgba(15,23,42,0.55)", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          로드맵 생성 미리보기
-        </p>
-        <p style={{ fontSize: "13px", color: BRAND, lineHeight: 1.6, margin: 0 }}>
-          아래 질문을 통해 로드맵 생성 과정을 미리 확인해보세요.
-          <br />
-          맞춤형 로드맵 생성은 로그인 후 이용할 수 있습니다.
-        </p>
+        </button>
+        <img src="/roadmap_preview.svg" alt="로드맵 생성 결과 미리보기" style={{ display: "block", maxWidth: "90vw", maxHeight: "90vh", borderRadius: "12px" }} />
+        {/* 이미지 하단 빈 공간에 맞춘 닫기 버튼 — X와 동일하게 팝업을 닫음 */}
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute", top: "92.5%", left: "50%", transform: "translate(-50%, -50%)",
+            padding: "10px 32px", borderRadius: "999px",
+            background: BRAND, color: "#fff", border: "none",
+            fontSize: "14px", fontWeight: 700, cursor: "pointer",
+          }}
+        >
+          닫기
+        </button>
       </div>
     </div>
   );
@@ -248,7 +365,7 @@ export default function Roadmap() {
   const navigate = useNavigate();
   const location = useLocation();
   const isEditMode = !!location.state?.edit;
-  const isLoggedIn = !!getToken();
+  const [showPreviewImage, setShowPreviewImage] = useState(false);
 
   const [answers, setAnswers] = useState<Answers>({});
   // "수정하러 가기"로 들어오면(isEditMode) GET /roadmap/me 의 latest.answers 로 초기값을 채움
@@ -412,7 +529,7 @@ export default function Roadmap() {
 
         <RoadmapSteps />
 
-        {!isLoggedIn && <PreviewNotice />}
+        <RoadmapNoticeRow onPreviewClick={() => setShowPreviewImage(true)} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {questions.map((q, idx) => {
@@ -440,11 +557,12 @@ export default function Roadmap() {
                 {/* 질문 카드 */}
                 <div
                   style={{
+                    position: "relative",
                     width: "100%",
                     minHeight: "160px",
                     display: "flex",
                     flexDirection: "column",
-                    padding: "18px 22px",
+                    padding: q.id === "q2" ? "18px 22px 40px" : "18px 22px",
                     borderRadius: "16px",
                     background: "#fff",
                     border: selected ? `2px solid ${BRAND}` : "1px solid #e5e7eb",
@@ -468,6 +586,8 @@ export default function Roadmap() {
                       <OptionsField q={q} answers={answers} onSingle={handleSingle} onMulti={handleMulti} />
                     )}
                   </div>
+
+                  {q.id === "q2" && <FieldGlossaryHint />}
                 </div>
               </div>
             );
@@ -499,6 +619,8 @@ export default function Roadmap() {
           )}
         </div>
       </div>
+
+      {showPreviewImage && <PreviewImageModal onClose={() => setShowPreviewImage(false)} />}
     </div>
   );
 }
