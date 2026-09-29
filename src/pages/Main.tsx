@@ -7,6 +7,7 @@ import { subscribeReadStatus, getReadStatusSnapshot, getReadingCalendar, type Re
 import { subscribeBookmarks, getBookmarksSnapshot, toggleBookmark } from "../lib/bookmarks";
 import { getToken, fetchMe } from "../lib/auth";
 import { getMyRoadmap, type MyRoadmap, type RoadmapAnalysis } from "../lib/roadmap";
+import { askChatbot, type ChatHistoryItem } from "../lib/chatbot";
 
 const BRAND = "#00178E";
 
@@ -302,11 +303,39 @@ function RoadmapInfoRow({ year, semester, tags }: { year: number; semester: numb
   );
 }
 
-/* ── H-AI에게 물어보기 (디자인만 — 답변 기능은 백엔드 API 준비되면 연결) ── */
+/* ── H-AI에게 물어보기 — POST /chatbot/ask 연동 (로그인 필요, 서버는 대화를 저장 안 해서 history 를 매번 같이 보냄) ── */
 const ASK_SUGGESTIONS = ["CV 입문 논문 추천해줘", "대학원 준비는 언제부터 시작하면 좋을까?", "관심 분야를 어떻게 정하면 좋을까?"];
 
 function AskHaiSection() {
   const [text, setText] = useState("");
+  const [messages, setMessages] = useState<ChatHistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSend = async () => {
+    const question = text.trim();
+    if (!question || loading) return;
+
+    if (!getToken()) {
+      setError("로그인 후 이용할 수 있어요.");
+      return;
+    }
+
+    setError(null);
+    const history = messages;
+    setMessages([...history, { role: "user", content: question }]);
+    setText("");
+    setLoading(true);
+
+    try {
+      const res = await askChatbot(question, history);
+      setMessages((prev) => [...prev, { role: "assistant", content: res.answer }]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "답변을 받아오지 못했어요.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <section style={{ marginBottom: "56px", textAlign: "center" }}>
@@ -327,27 +356,70 @@ function AskHaiSection() {
         <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.6, margin: "0 0 18px", textAlign: "left" }}>
           대학원 진학, 논문, 연구 분야에 대해<br />궁금한 점을 자유롭게 질문해보세요.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-start", gap: "8px", marginBottom: "20px" }}>
-          {ASK_SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setText(s)}
-              style={{ padding: "8px 14px", borderRadius: "999px", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontSize: "12.5px", cursor: "pointer" }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+
+        {messages.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px", maxHeight: "340px", overflowY: "auto", padding: "2px" }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                <div
+                  style={{
+                    maxWidth: "80%",
+                    padding: "10px 14px",
+                    borderRadius: "14px",
+                    fontSize: "13.5px",
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                    textAlign: "left",
+                    background: m.role === "user" ? BRAND : "#f1f5f9",
+                    color: m.role === "user" ? "#fff" : "#1e293b",
+                  }}
+                >
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div style={{ padding: "10px 14px", borderRadius: "14px", background: "#f1f5f9", color: "#94a3b8", fontSize: "13px" }}>
+                  답변을 준비하고 있어요...
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-start", gap: "8px", marginBottom: "20px" }}>
+            {ASK_SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setText(s)}
+                style={{ padding: "8px 14px", borderRadius: "999px", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontSize: "12.5px", cursor: "pointer" }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {error && <p style={{ fontSize: "12.5px", color: "#ef4444", textAlign: "left", margin: "0 0 10px" }}>{error}</p>}
+
         <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", borderRadius: "14px", padding: "8px 8px 8px 18px" }}>
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
             placeholder="질문을 입력해주세요."
             style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: "13.5px", color: "#1e293b" }}
           />
           <button
+            onClick={handleSend}
+            disabled={loading || !text.trim()}
             aria-label="질문 보내기"
-            style={{ width: "36px", height: "36px", borderRadius: "50%", background: BRAND, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+            style={{
+              width: "36px", height: "36px", borderRadius: "50%",
+              background: BRAND, border: "none", display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: loading || !text.trim() ? "not-allowed" : "pointer", opacity: loading || !text.trim() ? 0.5 : 1,
+              flexShrink: 0,
+            }}
           >
             <SendIcon />
           </button>
