@@ -2,7 +2,7 @@ import { Component, useEffect, useState, type ReactNode, type CSSProperties } fr
 import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from "react-router-dom";
 import { fetchMe } from "../lib/auth";
-import { getMyRoadmap, getMajorCourses, type RoadmapAnalysis, type MajorCoursesResponse, type MajorCourse } from "../lib/roadmap";
+import { getMyRoadmap, getMajorCourses, type RoadmapAnalysis, type MajorCoursesResponse, type MajorCourse, type BiohealthCourse } from "../lib/roadmap";
 
 /* =========================================================
  *  대표색 (앞으로 색 바꿀 땐 여기 두 줄만 수정하면 됨)
@@ -119,9 +119,11 @@ export function RadarChart({
 /* 섹션 카드 (배지 라벨 + 테두리) — 4번 반복되던 박스 공통화 */
 function SectionCard({ label, children, style }: { label: string; children: ReactNode; style?: CSSProperties }) {
   return (
-    <div style={{ position: "relative", border: `2px solid ${BRAND}`, borderRadius: "20px", padding: "30px 28px 28px", background: "#fff", ...style }}>
-      <div style={{ position: "absolute", top: "-14px", left: "20px", background: BRAND, color: "#fff", padding: "6px 16px", borderRadius: "999px", fontSize: "13px", fontWeight: 700, letterSpacing: "0.3px" }}>
-        {label}
+    <div style={{ position: "relative", borderRadius: "20px", padding: "30px 28px 28px", background: "#fff", boxShadow: "0 12px 40px rgba(15,23,42,0.06)", ...style }}>
+      <div style={{ position: "absolute", top: "-32px", left: "20px", background: "#fff", borderRadius: "999px", padding: "7px" }}>
+        <div style={{ background: "#F5F9FF", color: BRAND, padding: "4px 12px", borderRadius: "999px", fontSize: "13px", fontWeight: 800, letterSpacing: "0.3px" }}>
+          {label}
+        </div>
       </div>
       {children}
     </div>
@@ -232,6 +234,40 @@ function CourseChip({ course }: { course: MajorCourse }) {
   );
 }
 
+/* ── 바이오헬스 추천 교과목 — GET /roadmap/major-courses 응답의 biohealthCourses 사용 ── */
+function BiohealthTagBadge({ tag }: { tag: string }) {
+  return (
+    <span style={{ alignSelf: "flex-start", flexShrink: 0, padding: "4px 12px", borderRadius: "999px", fontSize: "12px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 700, whiteSpace: "nowrap" }}>
+      {tag}
+    </span>
+  );
+}
+
+function InfoChip({ label }: { label: string }) {
+  return (
+    <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "11.5px", background: "#f1f5f9", color: "#475569", fontWeight: 600, whiteSpace: "nowrap" }}>
+      {label}
+    </span>
+  );
+}
+
+function BiohealthCourseCard({ course, isFirst }: { course: BiohealthCourse; isFirst: boolean }) {
+  return (
+    <div style={{ display: "flex", gap: "14px", padding: "18px 0", borderTop: isFirst ? "none" : "1px solid #e5e7eb" }}>
+      <BiohealthTagBadge tag={course.tag} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>{course.name}</h4>
+        <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6, margin: "0 0 12px" }}>{course.description}</p>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <InfoChip label={course.category} />
+          <InfoChip label={course.level} />
+          <InfoChip label={`${course.credit}학점`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const pageBg = { width: "100%", minHeight: "100vh" };
 
 /* =========================================================
@@ -306,6 +342,18 @@ export default function RoadmapResult() {
   const tags = analysis.overview.interestFields ?? [];
   const commentLines = analysis.overview.comment.split("\n");
 
+  // recommended 는 기초 과목에도 항상 true 라서 쓸 수 없음 — 관심분야와 실제로 겹치는 과목이 있는지로 판단
+  const matchedMajorCourses = (majorCourses?.years ?? [])
+    .flatMap((y) => y.semesters)
+    .flatMap((s) => s.courses)
+    .filter((c) => c.fields.some((f) => majorCourses?.interestFields.includes(f)));
+  const noMajorMatch = !!majorCourses && matchedMajorCourses.length === 0;
+
+  // 백엔드가 이미 선택한 관심분야 태그만 걸러서 정렬까지 끝낸 상태로 내려줌 — 프론트에서 재정렬/재필터링하지 않음
+  const biohealthCourses = majorCourses?.biohealthCourses ?? [];
+  // 전공 격자에 겹치는 과목이 없을 때뿐 아니라, 바이오헬스 추천이 있을 때도 "학과 전공 내 적합한 추천 과목이 없어요" 안내로 설명
+  const showMajorNotice = noMajorMatch || biohealthCourses.length > 0;
+
   return (
     <div style={pageBg}>
       <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "90px" }}>
@@ -317,7 +365,7 @@ export default function RoadmapResult() {
           <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "44px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "64px" }}>
           {/* ── 종합 코멘트 ── */}
           <SectionCard label="종합 코멘트">
             <SectionBoundary fallback="종합 코멘트를 준비하고 있어요. 곧 만나보실 수 있어요!">
@@ -367,7 +415,14 @@ export default function RoadmapResult() {
 
           {/* ── 전공 로드맵 ── */}
           <SectionCard label="전공 로드맵">
-            <p style={sectionDesc}>관심 분야에 따라 추천된 전공 과목 내역입니다.</p>
+            {showMajorNotice ? (
+              <div style={{ marginBottom: "22px" }}>
+                <p style={{ fontSize: "14px", fontWeight: 500, color: BRAND, margin: "0 0 4px" }}>학과 내 연계 과목이 적은 분야는 바이오헬스 교과목을 함께 추천해드려요.</p>
+                <p style={{ fontSize: "13px", color: "#64748b", margin: "-4px 0 0" }}>관심 분야와 연관된 과목을 폭넓게 확인할 수 있도록 바이오헬스 연계 교과목을 추가로 제공합니다.</p>
+              </div>
+            ) : (
+              <p style={sectionDesc}>관심 분야에 따라 추천된 전공 과목 내역입니다.</p>
+            )}
             <SectionBoundary fallback="전공 로드맵을 불러오지 못했어요.">
             {majorCourses && majorCourses.years.length > 0 ? (
               <>
@@ -407,11 +462,25 @@ export default function RoadmapResult() {
               <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", padding: "24px 0" }}>전공 로드맵을 불러오지 못했어요.</p>
             )}
             </SectionBoundary>
+
+            {/* 바이오헬스 추천 교과목 — 전공 로드맵 카드 안에 이어서 표시, biohealthCourses 가 빈 배열이면 통째로 숨김 */}
+            {biohealthCourses.length > 0 && (
+              <div style={{ marginTop: "32px", paddingTop: "28px", borderTop: "1px solid #e5e7eb" }}>
+                <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", margin: "0 0 18px" }}>바이오헬스 추천 교과목</h3>
+                <SectionBoundary fallback="바이오헬스 추천 교과목을 불러오지 못했어요.">
+                  <div>
+                    {biohealthCourses.map((course, i) => (
+                      <BiohealthCourseCard key={course.courseId} course={course} isFirst={i === 0} />
+                    ))}
+                  </div>
+                </SectionBoundary>
+              </div>
+            )}
           </SectionCard>
 
           {/* ── 논문 로드맵 ── */}
           <SectionCard label="논문 로드맵">
-            <p style={sectionDesc}>선택한 관심 분야에 대한 핵심 논문 추천 결과입니다.</p>
+            <p style={{ ...sectionDesc, color: BRAND }}>선택한 관심 분야에 대한 핵심 논문 추천 결과입니다.</p>
             <SectionBoundary fallback="추천 논문을 준비하고 있어요. 곧 만나보실 수 있어요!">
             <div style={{ display: "flex", gap: "24px" }}>
               {[0, 1, 2].map((i) => {
