@@ -94,12 +94,24 @@ export type MajorCourse = {
   recommended: boolean
 }
 
+// 바이오헬스 추천 교과목 — 전공 과목이 아니라서 학년·학기 없이 별도 배열로 옴 (화면에서 재정렬하지 않고 그대로 표시)
+export type BiohealthCourse = {
+  tag: string
+  courseId: string
+  name: string
+  description: string
+  category: string
+  level: string
+  credit: number
+}
+
 export type MajorCoursesResponse = {
   interestFields: string[]
   years: {
     year: number
     semesters: { semester: number; courses: MajorCourse[] }[]
   }[]
+  biohealthCourses: BiohealthCourse[]
 }
 
 // 실패 시 status 를 담아 throw — 호출부에서 409(이미 존재)/404(없음) 등을 구분해 처리할 수 있게
