@@ -1,6 +1,6 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
-import { pageContainer, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, pageTitle, pageSubtitle, HERO_GAP, INK_80 } from '../styles/pageTheme'
 import { RadarChart } from "./RoadmapResult";
 import ReadStatusTag from "../components/ReadStatusTag";
 import { subscribeReadStatus, getReadStatusSnapshot, getReadingCalendar, type ReadingCalendar } from "../lib/readStatus";
@@ -46,12 +46,12 @@ function MiniCalendar() {
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
-  const bgFor = (day: number | null) => {
-    if (!day) return "transparent";
+  const iconFor = (day: number | null) => {
+    if (!day) return undefined;
     const s = dayStatus[day];
-    if (s === "completed") return "#7f9bec";
-    if (s === "reading") return "#d3ddf9";
-    return "#f1f5f9";
+    if (s === "completed") return "/calendar_done.svg";
+    if (s === "reading") return "/calendar_reading.svg";
+    return "/calendar_none.svg";
   };
 
   const goPrevMonth = () => setCursor(({ year: y, month: m }) => (m === 0 ? { year: y - 1, month: 11 } : { year: y, month: m - 1 }));
@@ -80,7 +80,9 @@ function MiniCalendar() {
               style={{
                 aspectRatio: "1 / 1",
                 borderRadius: "6px",
-                background: bgFor(day),
+                backgroundImage: day ? `url(${iconFor(day)})` : undefined,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -94,12 +96,12 @@ function MiniCalendar() {
           ))}
         </div>
         {/* 범례 */}
-        <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginTop: "12px", fontSize: "11px", color: "#64748b" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-            <span style={{ width: "10px", height: "10px", borderRadius: "3px", background: "#d3ddf9" }} /> 읽는 중
+        <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginTop: "12px", fontSize: "13px", color: "#64748b" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            읽는 중 <span style={{ width: "14px", height: "14px", borderRadius: "50%", backgroundImage: "url(/calendar_reading.svg)", backgroundSize: "cover", backgroundPosition: "center" }} />
           </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-            <span style={{ width: "10px", height: "10px", borderRadius: "3px", background: "#7f9bec" }} /> 읽기 완료
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            읽기 완료 <span style={{ width: "14px", height: "14px", borderRadius: "50%", backgroundImage: "url(/calendar_done.svg)", backgroundSize: "cover", backgroundPosition: "center" }} />
           </span>
         </div>
       </div>
@@ -201,45 +203,6 @@ function CheckIcon({ color }: { color: string }) {
   );
 }
 
-/* ── 공용 아이콘 ── */
-function PapersIcon({ color = BRAND }: { color?: string }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 5.3A2 2 0 0 1 6 3.3h5.3v17.4H6A2 2 0 0 1 4 18.7V5.3z" />
-      <path d="M20 5.3a2 2 0 0 0-2-2h-5.3v17.4H18a2 2 0 0 0 2-2V5.3z" />
-      <path d="M14.6 7.8h3.2M14.6 10.8h3.2M14.6 13.8h2" />
-    </svg>
-  );
-}
-
-function ChartIcon({ color = BRAND }: { color?: string }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 20V10M12 20V4M20 20v-7" />
-    </svg>
-  );
-}
-
-function PeopleIcon({ color = BRAND }: { color?: string }) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
-      <circle cx="17.5" cy="9.2" r="2.4" />
-      <path d="M15.6 14.4c2.5.4 4.4 2.5 4.4 5.6" />
-    </svg>
-  );
-}
-
-function TagIcon({ color = "#94a3b8" }: { color?: string }) {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.6 12.3 12.7 4.4a1.5 1.5 0 0 0-1.06-.44H5A1.5 1.5 0 0 0 3.5 5.5v6.65c0 .4.16.78.44 1.06l7.9 7.9a1.5 1.5 0 0 0 2.12 0l6.64-6.65a1.5 1.5 0 0 0 0-2.12z" />
-      <circle cx="8.2" cy="8.2" r="1.3" fill={color} stroke="none" />
-    </svg>
-  );
-}
-
 function SendIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -270,7 +233,7 @@ function SummaryCard({
         background: "#fff",
         borderRadius: "24px",
         padding: "28px 30px",
-        boxShadow: "0 12px 40px rgba(15,23,42,0.06)",
+        border: "1px solid #eef1f5",
         cursor: onClick ? "pointer" : "default",
         transition: "0.15s",
       }}
@@ -279,7 +242,7 @@ function SummaryCard({
     >
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "22px" }}>
         {icon}
-        <h3 style={{ fontSize: "16px", fontWeight: 800, color: "#1e293b", margin: 0 }}>{title}</h3>
+        <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#1e293b", margin: 0 }}>{title}</h3>
       </div>
       {children}
     </div>
@@ -290,12 +253,12 @@ function SummaryCard({
 function RoadmapInfoRow({ year, semester, tags }: { year: number; semester: number; tags: string[] }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: HERO_GAP }}>
-      <TagIcon />
-      <span style={{ fontSize: "14px", fontWeight: 600, color: "#475569" }}>{year}학년 {semester}학기</span>
-      <span style={{ width: "1px", height: "14px", background: "#e2e8f0" }} />
-      <span style={{ fontSize: "14px", color: "#94a3b8" }}>관심 분야</span>
+      <img src="/main_semester_icon.svg" alt="" width={25} height={25} />
+      <span style={{ fontSize: "14px", fontWeight: 400, color: INK_80 }}>{year}학년 {semester}학기</span>
+      <span style={{ width: "1px", height: "14px", background: "rgba(60,60,67,0.25)" }} />
+      <span style={{ fontSize: "14px", fontWeight: 400, color: INK_80 }}>관심 분야</span>
       {tags.map((tag) => (
-        <span key={tag} style={{ padding: "4px 14px", borderRadius: "999px", fontSize: "12.5px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 600 }}>
+        <span key={tag} style={{ padding: "3px 11px", borderRadius: "999px", fontSize: "11px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 600 }}>
           {tag}
         </span>
       ))}
@@ -306,15 +269,46 @@ function RoadmapInfoRow({ year, semester, tags }: { year: number; semester: numb
 /* ── H-AI에게 물어보기 — POST /chatbot/ask 연동 (로그인 필요, 서버는 대화를 저장 안 해서 history 를 매번 같이 보냄) ── */
 const ASK_SUGGESTIONS = ["CV 입문 논문 추천해줘", "대학원 준비는 언제부터 시작하면 좋을까?", "관심 분야를 어떻게 정하면 좋을까?"];
 
+// 답변 글자를 한 번에 몇 자씩, 몇 ms 간격으로 보여줄지 — ChatGPT처럼 타이핑되는 느낌을 흉내냄
+// (백엔드가 스트리밍 API가 아니라 완성된 답변을 한 번에 주기 때문에, 받은 다음 프론트에서 재생함)
+const TYPE_CHARS_PER_TICK = 2;
+const TYPE_INTERVAL_MS = 18;
+
 function AskHaiSection() {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [typingText, setTypingText] = useState<string | null>(null); // null = 타이핑 중 아님
   const [error, setError] = useState<string | null>(null);
+  const typingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimer.current) clearInterval(typingTimer.current);
+    };
+  }, []);
+
+  const playTyping = (fullText: string) => {
+    let shown = 0;
+    setTypingText("");
+    typingTimer.current = setInterval(() => {
+      shown += TYPE_CHARS_PER_TICK;
+      if (shown >= fullText.length) {
+        if (typingTimer.current) clearInterval(typingTimer.current);
+        typingTimer.current = null;
+        setTypingText(null);
+        setMessages((prev) => [...prev, { role: "assistant", content: fullText }]);
+        return;
+      }
+      setTypingText(fullText.slice(0, shown));
+    }, TYPE_INTERVAL_MS);
+  };
+
+  const busy = loading || typingText !== null;
 
   const handleSend = async () => {
     const question = text.trim();
-    if (!question || loading) return;
+    if (!question || busy) return;
 
     if (!getToken()) {
       setError("로그인 후 이용할 수 있어요.");
@@ -329,33 +323,29 @@ function AskHaiSection() {
 
     try {
       const res = await askChatbot(question, history);
-      setMessages((prev) => [...prev, { role: "assistant", content: res.answer }]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "답변을 받아오지 못했어요.");
-    } finally {
       setLoading(false);
+      playTyping(res.answer);
+    } catch (e) {
+      setLoading(false);
+      setError(e instanceof Error ? e.message : "답변을 받아오지 못했어요.");
     }
   };
 
   return (
     <section style={{ marginBottom: "56px", textAlign: "center" }}>
-      <h2
-        style={{
-          fontSize: "28px",
-          fontWeight: 800,
-          margin: "0 0 20px",
-          background: `linear-gradient(90deg, ${BRAND} 0%, #7f9bec 100%)`,
-          WebkitBackgroundClip: "text",
-          backgroundClip: "text",
-          color: "transparent",
-        }}
-      >
-        H-AI에게 물어보기
+      <h2 style={{ margin: "0 0 20px", textAlign: "center" }}>
+        <img src="/main_ask_hai_title.svg" alt="H-AI에게 물어보기" height={52} style={{ display: "inline-block" }} />
       </h2>
       <div style={{ background: "#fff", borderRadius: "24px", padding: "32px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
-        <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.6, margin: "0 0 18px", textAlign: "left" }}>
-          대학원 진학, 논문, 연구 분야에 대해<br />궁금한 점을 자유롭게 질문해보세요.
-        </p>
+        {messages.length > 0 ? (
+          <div style={{ marginBottom: "18px" }}>
+            <img src="/logo.svg" alt="" style={{ height: "26px", width: "auto" }} />
+          </div>
+        ) : (
+          <p style={{ fontSize: "14px", color: "#475569", lineHeight: 1.6, margin: "0 0 18px", textAlign: "left" }}>
+            대학원 진학, 논문, 연구 분야에 대해<br />궁금한 점을 자유롭게 질문해보세요.
+          </p>
+        )}
 
         {messages.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px", maxHeight: "340px", overflowY: "auto", padding: "2px" }}>
@@ -382,6 +372,26 @@ function AskHaiSection() {
               <div style={{ display: "flex", justifyContent: "flex-start" }}>
                 <div style={{ padding: "10px 14px", borderRadius: "14px", background: "#f1f5f9", color: "#94a3b8", fontSize: "13px" }}>
                   답변을 준비하고 있어요...
+                </div>
+              </div>
+            )}
+            {typingText !== null && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div
+                  style={{
+                    maxWidth: "80%",
+                    padding: "10px 14px",
+                    borderRadius: "14px",
+                    fontSize: "13.5px",
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                    textAlign: "left",
+                    background: "#f1f5f9",
+                    color: "#1e293b",
+                  }}
+                >
+                  {typingText}
+                  <span style={{ display: "inline-block", width: "2px", height: "13px", background: "#94a3b8", marginLeft: "2px", verticalAlign: "-2px" }} />
                 </div>
               </div>
             )}
@@ -412,12 +422,12 @@ function AskHaiSection() {
           />
           <button
             onClick={handleSend}
-            disabled={loading || !text.trim()}
+            disabled={busy || !text.trim()}
             aria-label="질문 보내기"
             style={{
               width: "36px", height: "36px", borderRadius: "50%",
               background: BRAND, border: "none", display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: loading || !text.trim() ? "not-allowed" : "pointer", opacity: loading || !text.trim() ? 0.5 : 1,
+              cursor: busy || !text.trim() ? "not-allowed" : "pointer", opacity: busy || !text.trim() ? 0.5 : 1,
               flexShrink: 0,
             }}
           >
@@ -430,7 +440,7 @@ function AskHaiSection() {
 }
 
 /* ── 다음 준비를 이어가보세요 — 다른 기능으로 이동하는 카드 3개 ── */
-function NextStepCard({ icon, title, desc, onClick }: { icon: React.ReactNode; title: string; desc: string; onClick: () => void }) {
+function NextStepCard({ icon, title, desc, onClick }: { icon: React.ReactNode; title: string; desc: React.ReactNode; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
@@ -449,12 +459,12 @@ function NextStepCard({ icon, title, desc, onClick }: { icon: React.ReactNode; t
       onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
       onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
     >
-      <div style={{ width: "48px", height: "48px", borderRadius: "14px", background: "#eef2ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         {icon}
       </div>
       <div style={{ flex: 1 }}>
-        <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px" }}>{title}</h4>
-        <p style={{ fontSize: "12px", color: "#64748b", lineHeight: 1.5, margin: 0 }}>{desc}</p>
+        <h4 style={{ fontSize: "17px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px" }}>{title}</h4>
+        <p style={{ fontSize: "14px", color: "#64748b", lineHeight: 1.5, margin: 0 }}>{desc}</p>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
         <path d="M9 6l6 6-6 6" stroke="#94a3b8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -470,7 +480,7 @@ const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
   { key: "experience", label: "경험" },
   { key: "paper", label: "논문 루틴" },
   { key: "preparation", label: "포트폴리오" },
-  { key: "academic", label: "학업" },
+  { key: "academic", label: "성적" },
 ];
 
 function MyRoadmapCard({ myRoadmap }: { myRoadmap: MyRoadmap | null }) {
@@ -478,7 +488,7 @@ function MyRoadmapCard({ myRoadmap }: { myRoadmap: MyRoadmap | null }) {
 
   if (!myRoadmap?.hasRoadmap || !myRoadmap.latest) {
     return (
-      <SummaryCard icon={<ChartIcon />} title="내 로드맵" flex="1 1 300px">
+      <SummaryCard icon={<img src="/main_roadmap_icon.svg" alt="" width={28} height={28} style={{ filter: "drop-shadow(0 4px 8px rgba(15,23,42,0.15))" }} />} title="내 로드맵" flex="1 1 300px">
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <p style={{ fontSize: "13px", color: "#94a3b8", margin: "0 0 16px" }}>아직 생성된 로드맵이 없어요.</p>
           <button
@@ -497,18 +507,20 @@ function MyRoadmapCard({ myRoadmap }: { myRoadmap: MyRoadmap | null }) {
   const axes = RADAR_AXES.map((a) => ({ label: a.label, v: result.radar[a.key] }));
 
   return (
-    <SummaryCard icon={<ChartIcon />} title="내 로드맵" flex="1 1 300px" onClick={() => navigate("/roadmap-result")}>
+    <SummaryCard icon={<img src="/main_roadmap_icon.svg" alt="" width={28} height={28} style={{ filter: "drop-shadow(0 4px 8px rgba(15,23,42,0.15))" }} />} title="내 로드맵" flex="1 1 300px" onClick={() => navigate("/roadmap-result")}>
       <div style={{ display: "flex", justifyContent: "center" }}>
         <RadarChart values={axes.map((a) => a.v)} labels={axes.map((a) => a.label)} max={10} />
       </div>
-      <div style={{ textAlign: "center", marginTop: "4px" }}>
-        <b style={{ fontSize: "26px", color: BRAND }}>{result.overview.totalScore}점</b>
-        <span style={{ fontSize: "14px", color: "#94a3b8" }}>/100</span>
-      </div>
-      <div style={{ display: "flex", justifyContent: "center", gap: "6px", flexWrap: "wrap", marginTop: "12px" }}>
-        {tags.map((tag) => (
-          <span key={tag} style={{ padding: "4px 12px", borderRadius: "999px", fontSize: "11.5px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 600 }}>{tag}</span>
-        ))}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginTop: "14px", flexWrap: "nowrap" }}>
+        <div style={{ flexShrink: 0, marginLeft: "10px" }}>
+          <b style={{ fontSize: "26px", color: BRAND }}>{result.overview.totalScore}점</b>
+          <span style={{ fontSize: "14px", color: BRAND, fontWeight: 600 }}>/100</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "5px", flexWrap: "nowrap", minWidth: 0 }}>
+          {tags.map((tag) => (
+            <span key={tag} style={{ padding: "3px 9px", borderRadius: "999px", fontSize: "10.5px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>{tag}</span>
+          ))}
+        </div>
       </div>
     </SummaryCard>
   );
@@ -534,7 +546,18 @@ function ContinueReadingSection() {
 
   return (
     <section style={{ marginTop: "64px" }}>
-      <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 20px" }}>이어서 읽어볼까요?</h2>
+      <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1e293b", margin: "0 0 4px" }}>이어서 읽어볼까요?</h2>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", margin: "0 0 20px" }}>
+        <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>읽는 중인 논문을 이어서 확인해보세요.</p>
+        {reading.length > 0 && (
+          <button
+            onClick={() => navigate("/mypage")}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: "13px", fontWeight: 600, color: BRAND, whiteSpace: "nowrap" }}
+          >
+            읽는 중인 논문 전체보기 →
+          </button>
+        )}
+      </div>
 
       {reading.length === 0 ? (
         <div style={{ background: "#fff", borderRadius: "24px", padding: "48px 40px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)", textAlign: "center" }}>
@@ -619,15 +642,6 @@ function ContinueReadingSection() {
 
             <CarouselArrow direction="right" disabled={current >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} />
           </div>
-
-          <div style={{ textAlign: "right", marginTop: "20px" }}>
-            <button
-              onClick={() => navigate("/mypage")}
-              style={{ padding: "12px 24px", background: "#7f9bec", color: "#fff", border: "none", borderRadius: "12px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
-            >
-              읽는 중인 논문 전체보기 &gt;
-            </button>
-          </div>
         </>
       )}
     </section>
@@ -655,7 +669,7 @@ function CarouselArrow({ direction, disabled, onClick }: { direction: "left" | "
       disabled={disabled}
       aria-label={direction === "left" ? "이전" : "다음"}
       style={{
-        width: "24px", height: "48px", flexShrink: 0,
+        width: "32px", height: "52px", flexShrink: 0,
         background: "none", border: "none", padding: 0,
         cursor: disabled ? "default" : "pointer",
         opacity: disabled ? 0.25 : 1,
@@ -664,8 +678,8 @@ function CarouselArrow({ direction, disabled, onClick }: { direction: "left" | "
       }}
     >
       <svg
-        width="20" height="20" viewBox="0 0 24 24" fill="none"
-        stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        width="28" height="28" viewBox="0 0 24 24" fill="none"
+        stroke="#1e293b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
         style={{ transform: direction === "right" ? "rotate(180deg)" : undefined }}
       >
         <path d="M15 5l-7 7 7 7" />
@@ -705,10 +719,10 @@ export default function Main() {
   const latestTags = myRoadmap?.hasRoadmap ? myRoadmap.latest?.result.overview.interestFields ?? [] : [];
 
   return (
-    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "56px" }}>
+    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "160px" }}>
       {/* 인사말 */}
       <div style={{ marginBottom: latestAnswers ? "16px" : HERO_GAP }}>
-        <h1 style={pageTitle}>안녕하세요, {nickname || "회원"}님!</h1>
+        <h1 style={{ ...pageTitle, fontWeight: 400 }}>안녕하세요, {nickname || "회원"}님!</h1>
         <p style={pageSubtitle}>오늘 필요한 대학원 준비를 이어가보세요.</p>
       </div>
 
@@ -720,29 +734,35 @@ export default function Main() {
       {/* H-AI에게 물어보기 */}
       <AskHaiSection />
 
-      {/* 나의 대학원 준비 현황 */}
-      <section style={{ marginBottom: "20px" }}>
-        <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 8px" }}>나의 대학원 준비 현황</h2>
-        <p style={{ fontSize: "14px", color: "#475569", margin: "0 0 24px" }}>논문 활동과 로드맵을 한눈에 확인해보세요.</p>
-        <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-          <SummaryCard icon={<PapersIcon />} title="이번 달 논문 활동" flex="1.6 1 420px">
-            <MiniCalendar />
-          </SummaryCard>
-          <MyRoadmapCard myRoadmap={myRoadmap} />
+      {/* 나의 대학원 준비 현황 — 박스는 그대로 두고, 화면 좌우 끝까지 흰 배경이 꽉 차게(풀블리드) 깔고
+          그 안에서 본문 내용만 다시 pageContainer 폭으로 가운데 정렬 */}
+      <section style={{ marginBottom: "20px", background: "#fff", padding: "32px 0", width: "100vw", marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}>
+        <div style={pageContainer}>
+          <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1e293b", margin: "0 0 4px" }}>나의 대학원 준비 현황</h2>
+          <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 24px" }}>논문 활동과 로드맵을 한눈에 확인해보세요.</p>
+          <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
+            <SummaryCard icon={<img src="/main_papers_icon.svg" alt="" width={28} height={28} style={{ filter: "drop-shadow(0 4px 8px rgba(15,23,42,0.15))" }} />} title="이번 달 논문 활동" flex="1.6 1 420px">
+              <MiniCalendar />
+            </SummaryCard>
+            <MyRoadmapCard myRoadmap={myRoadmap} />
+          </div>
         </div>
       </section>
 
       {/* 이어서 읽어볼까요? — 읽는 중인 논문 캐러셀 */}
       <ContinueReadingSection />
 
-      {/* 다음 준비를 이어가보세요 */}
-      <section style={{ marginTop: "64px" }}>
-        <h2 style={{ fontSize: "22px", fontWeight: 800, color: BRAND, margin: "0 0 8px" }}>다음 준비를 이어가보세요</h2>
-        <p style={{ fontSize: "14px", color: "#475569", margin: "0 0 24px" }}>더 많은 기능으로 대학원 준비를 체계적으로.</p>
-        <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-          <NextStepCard icon={<PapersIcon />} title="논문 탐색하기" desc="관심 분야의 최신 논문을 찾아보세요." onClick={() => goToTop("/papers")} />
-          <NextStepCard icon={<PeopleIcon />} title="커뮤니티 둘러보기" desc="다른 사람들의 경험과 정보를 만나보세요." onClick={() => goToTop("/community")} />
-          <NextStepCard icon={<ChartIcon />} title="내 로드맵 확인하기" desc="현재 준비 상태와 다음 단계를 확인하세요." onClick={() => goToTop("/roadmap")} />
+      {/* 다음 준비를 이어가보세요 — 풀블리드 흰 배경 (푸터도 흰색이라, Main 루트의 paddingBottom 이
+          이 섹션과 푸터 사이에 하늘색 여백으로 남아서 둘이 바로 안 붙어 보이게 함) */}
+      <section style={{ marginTop: "64px", background: "#fff", padding: "32px 0", width: "100vw", marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}>
+        <div style={pageContainer}>
+          <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1e293b", margin: "0 0 4px" }}>다음 준비를 이어가보세요</h2>
+          <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 24px" }}>더 많은 기능으로 대학원 준비를 체계적으로.</p>
+          <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+            <NextStepCard icon={<img src="/main_explore_icon.svg" alt="" width={56} height={56} />} title="논문 탐색하기" desc="관심 분야의 최신 논문을 찾아보세요." onClick={() => goToTop("/papers")} />
+            <NextStepCard icon={<img src="/main_community_icon.svg" alt="" width={56} height={56} />} title="커뮤니티 둘러보기" desc={<>다른 사람들의 경험과<br />정보를 만나보세요.</>} onClick={() => goToTop("/community")} />
+            <NextStepCard icon={<img src="/main_myroadmap_icon.svg" alt="" width={56} height={56} />} title="내 로드맵 확인하기" desc={<>현재 준비 상태와 다음<br />단계를 확인하세요.</>} onClick={() => goToTop("/roadmap")} />
+          </div>
         </div>
       </section>
     </div>

@@ -1,5 +1,5 @@
 import { Component, useEffect, useState, type ReactNode, type CSSProperties } from "react";
-import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle, HERO_GAP } from '../styles/pageTheme'
+import { pageContainer, PAGE_TOP, pageTitle, pageSubtitle } from '../styles/pageTheme'
 import { useNavigate } from "react-router-dom";
 import { fetchMe } from "../lib/auth";
 import { getMyRoadmap, getMajorCourses, type RoadmapAnalysis, type MajorCoursesResponse, type MajorCourse, type BiohealthCourse } from "../lib/roadmap";
@@ -107,7 +107,7 @@ export function RadarChart({
         const c = Math.cos(angleFor(i));
         const anchor = Math.abs(c) < 0.3 ? "middle" : c > 0 ? "start" : "end";
         return (
-          <text key={label} x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle" fontSize="13" fontWeight="600" fill="#475569">
+          <text key={label} x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle" fontSize="15" fontWeight="600" fill="#475569">
             {label}
           </text>
         );
@@ -117,15 +117,16 @@ export function RadarChart({
 }
 
 /* 섹션 카드 (배지 라벨 + 테두리) — 4번 반복되던 박스 공통화 */
-function SectionCard({ label, children, style }: { label: string; children: ReactNode; style?: CSSProperties }) {
+function SectionCard({ label, icon, children, style }: { label: string; icon?: string; children: ReactNode; style?: CSSProperties }) {
   return (
     <div style={{ position: "relative", borderRadius: "20px", padding: "30px 28px 28px", background: "#fff", boxShadow: "0 12px 40px rgba(15,23,42,0.06)", ...style }}>
-      <div style={{ position: "absolute", top: "-32px", left: "20px", background: "#fff", borderRadius: "999px", padding: "7px" }}>
-        <div style={{ background: "#F5F9FF", color: BRAND, padding: "4px 12px", borderRadius: "999px", fontSize: "13px", fontWeight: 800, letterSpacing: "0.3px" }}>
+      <div style={{ position: "absolute", top: "-26px", left: "18px", zIndex: 0, background: "#fff", borderRadius: "999px", padding: "10px 16px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#F5F9FF", color: BRAND, padding: "4px 12px", borderRadius: "999px", fontSize: "13px", fontWeight: 800, letterSpacing: "0.3px" }}>
+          {icon && <img src={icon} alt="" width={14} height={14} />}
           {label}
         </div>
       </div>
-      {children}
+      <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </div>
   );
 }
@@ -161,7 +162,7 @@ const RADAR_AXES: { key: keyof RoadmapAnalysis["radar"]; label: string }[] = [
   { key: "experience", label: "경험" },
   { key: "paper", label: "논문 루틴" },
   { key: "preparation", label: "포트폴리오" },
-  { key: "academic", label: "학업" },
+  { key: "academic", label: "성적" },
 ];
 
 /* 과목 칩 — 호버 시 description 말풍선 (추천/일반 상관없이 표시) */
@@ -245,7 +246,7 @@ function BiohealthTagBadge({ tag }: { tag: string }) {
 
 function InfoChip({ label }: { label: string }) {
   return (
-    <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: "999px", fontSize: "11.5px", background: "#f1f5f9", color: "#475569", fontWeight: 600, whiteSpace: "nowrap" }}>
+    <span style={{ display: "inline-block", padding: "2px 9px", borderRadius: "999px", fontSize: "10px", background: "#f1f5f9", color: "#475569", fontWeight: 600, whiteSpace: "nowrap" }}>
       {label}
     </span>
   );
@@ -253,16 +254,16 @@ function InfoChip({ label }: { label: string }) {
 
 function BiohealthCourseCard({ course, isFirst }: { course: BiohealthCourse; isFirst: boolean }) {
   return (
-    <div style={{ display: "flex", gap: "14px", padding: "18px 0", borderTop: isFirst ? "none" : "1px solid #e5e7eb" }}>
-      <BiohealthTagBadge tag={course.tag} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>{course.name}</h4>
-        <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.6, margin: "0 0 12px" }}>{course.description}</p>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <InfoChip label={course.category} />
-          <InfoChip label={course.level} />
-          <InfoChip label={`${course.credit}학점`} />
-        </div>
+    <div style={{ padding: "18px 0", borderTop: isFirst ? "none" : "1px solid #e5e7eb" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+        <BiohealthTagBadge tag={course.tag} />
+        <h4 style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a", margin: 0 }}>{course.name}</h4>
+      </div>
+      <p style={{ fontSize: "12.5px", color: "#475569", lineHeight: 1.6, margin: "0 0 12px" }}>{course.description}</p>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <InfoChip label={course.category} />
+        <InfoChip label={course.level} />
+        <InfoChip label={`${course.credit}학점`} />
       </div>
     </div>
   );
@@ -282,6 +283,7 @@ export default function RoadmapResult() {
   const [analysis, setAnalysis] = useState<RoadmapAnalysis | null>(null);
   const [initialAnalysis, setInitialAnalysis] = useState<RoadmapAnalysis | null>(null);
   const [majorCourses, setMajorCourses] = useState<MajorCoursesResponse | null>(null);
+  const [bioExpanded, setBioExpanded] = useState(false); // 바이오헬스 추천 교과목 — 기본은 태그별 1개만, 더보기 누르면 전체
 
   useEffect(() => {
     let cancelled = false;
@@ -358,14 +360,14 @@ export default function RoadmapResult() {
     <div style={pageBg}>
       <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: "90px" }}>
         {/* 헤더 */}
-        <div style={{ marginBottom: HERO_GAP }}>
-          <h1 style={pageTitle}>
-            {nickname ? `${nickname}님의 로드맵 결과입니다.` : "로드맵 결과입니다."}
+        <div style={{ marginBottom: "80px", textAlign: "center" }}>
+          <h1 style={{ ...pageTitle, fontSize: "28px", fontWeight: 600 }}>
+            {nickname ? `${nickname}님의 로드맵이 완성됐어요` : "로드맵이 완성됐어요"}
           </h1>
-          <p style={pageSubtitle}>전공·논문·준비 액션을 한 플랜으로 정리해드려요.</p>
+          <p style={{ ...pageSubtitle, fontWeight: 500 }}>준비도 진단 결과를 바탕으로 전공 로드맵, 논문 로드맵, 성장 가이드를 확인해보세요</p>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "64px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "96px" }}>
           {/* ── 종합 코멘트 ── */}
           <SectionCard label="종합 코멘트">
             <SectionBoundary fallback="종합 코멘트를 준비하고 있어요. 곧 만나보실 수 있어요!">
@@ -391,16 +393,16 @@ export default function RoadmapResult() {
               <div style={{ width: "1px", alignSelf: "stretch", background: "#e5e7eb" }} />
               <div style={{ flex: 1, minWidth: "260px" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "16px" }}>
-                  <span style={{ fontSize: "15px", color: "#475569" }}>종합 점수</span>
+                  <span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>종합 점수</span>
                   <b style={{ fontSize: "34px", color: BRAND, lineHeight: 1 }}>{analysis.overview.totalScore}점</b>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "18px", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: "13px", color: "#64748b", marginRight: "2px" }}>관심 분야</span>
+                  <span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b", marginRight: "2px" }}>관심 분야</span>
                   {tags.map((tag) => (
                     <span key={tag} style={{ padding: "5px 14px", borderRadius: "999px", fontSize: "13px", border: `1.5px solid ${BRAND}`, color: BRAND, fontWeight: 600 }}>{tag}</span>
                   ))}
                 </div>
-                <p style={{ fontSize: "13.5px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
+                <p style={{ fontSize: "13.5px", color: "#1e293b", lineHeight: 1.7, margin: 0 }}>
                   {commentLines.map((line, i) => (
                     <span key={i}>
                       {line}
@@ -463,19 +465,48 @@ export default function RoadmapResult() {
             )}
             </SectionBoundary>
 
-            {/* 바이오헬스 추천 교과목 — 전공 로드맵 카드 안에 이어서 표시, biohealthCourses 가 빈 배열이면 통째로 숨김 */}
-            {biohealthCourses.length > 0 && (
-              <div style={{ marginTop: "32px", paddingTop: "28px", borderTop: "1px solid #e5e7eb" }}>
-                <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", margin: "0 0 18px" }}>바이오헬스 추천 교과목</h3>
-                <SectionBoundary fallback="바이오헬스 추천 교과목을 불러오지 못했어요.">
-                  <div>
-                    {biohealthCourses.map((course, i) => (
-                      <BiohealthCourseCard key={course.courseId} course={course} isFirst={i === 0} />
-                    ))}
-                  </div>
-                </SectionBoundary>
-              </div>
-            )}
+            {/* 바이오헬스 추천 교과목 — 전공 로드맵 카드 안에 이어서 표시, biohealthCourses 가 빈 배열이면 통째로 숨김
+                기본은 태그마다 첫 번째 과목 1개씩만, "더보기" 누르면 전체 표시 (배열 순서는 그대로 유지) */}
+            {biohealthCourses.length > 0 && (() => {
+              const seenTags = new Set<string>();
+              const bioPrimary = biohealthCourses.filter((c) => {
+                if (seenTags.has(c.tag)) return false;
+                seenTags.add(c.tag);
+                return true;
+              });
+              const hasMore = bioPrimary.length < biohealthCourses.length;
+              const bioShown = bioExpanded ? biohealthCourses : bioPrimary;
+
+              return (
+                <div style={{ marginTop: "32px", paddingTop: "28px", borderTop: "1px solid #e5e7eb" }}>
+                  <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", margin: "0 0 18px" }}>바이오헬스 추천 교과목</h3>
+                  <SectionBoundary fallback="바이오헬스 추천 교과목을 불러오지 못했어요.">
+                    <div>
+                      {bioShown.map((course, i) => (
+                        <BiohealthCourseCard key={course.courseId} course={course} isFirst={i === 0} />
+                      ))}
+                    </div>
+                    {hasMore && (
+                      <div style={{ textAlign: "center", marginTop: "12px" }}>
+                        <button
+                          onClick={() => setBioExpanded((v) => !v)}
+                          style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: "none", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "14.5px", fontWeight: 600, color: "#64748b" }}
+                        >
+                          {bioExpanded ? "접기" : "더보기"}
+                          <svg
+                            width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="#64748b" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ transform: bioExpanded ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }}
+                          >
+                            <path d="M5 8l7 7 7-7" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </SectionBoundary>
+                </div>
+              );
+            })()}
           </SectionCard>
 
           {/* ── 논문 로드맵 ── */}
@@ -527,37 +558,39 @@ export default function RoadmapResult() {
           </SectionCard>
 
           {/* ── 성장 가이드 ── */}
-          <SectionCard label="성장 가이드">
+          <SectionCard label="성장 가이드" icon="/roadmap_growth_icon.svg">
             <SectionBoundary fallback="맞춤 성장 가이드를 준비하고 있어요. 곧 만나보실 수 있어요!">
-            <div style={{ display: "flex", alignItems: "stretch", gap: "18px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "stretch", gap: "0px", flexWrap: "wrap" }}>
               {/* 현재 상태 카드 2개 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px", flex: "0 0 200px" }}>
-                <div style={{ border: "1.5px solid #e2e8f0", borderRadius: "14px", padding: "16px 18px", textAlign: "center" }}>
-                  <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 8px" }}>📑 현재 논문 역량</p>
-                  <b style={{ fontSize: "24px", color: "#0f172a" }}>{analysis.growthGuide.paperFrequency}</b>
+              <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "14px", flex: "0 0 200px", marginRight: "18px" }}>
+                <div style={{ background: "#fff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "16px 18px", textAlign: "center" }}>
+                  <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "15px", fontWeight: 600, color: "#0f172a", margin: "0 0 8px" }}>
+                    <img src="/roadmap_paper_level_icon.svg" alt="" width={20} height={20} /> 현재 논문 역량
+                  </p>
+                  <b style={{ fontSize: "24px", color: BRAND }}>{analysis.growthGuide.paperFrequency}</b>
                 </div>
-                <div style={{ border: "1.5px solid #e2e8f0", borderRadius: "14px", padding: "16px 18px", textAlign: "center" }}>
-                  <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 8px" }}>🏆 현재 대외 경험</p>
-                  <b style={{ fontSize: "24px", color: "#0f172a" }}>{analysis.growthGuide.externalActivity}</b>
+                <div style={{ background: "#fff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "16px 18px", textAlign: "center" }}>
+                  <p style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "15px", fontWeight: 600, color: "#0f172a", margin: "0 0 8px" }}>
+                    <img src="/roadmap_external_icon.svg" alt="" width={20} height={20} /> 현재 대외 경험
+                  </p>
+                  <b style={{ fontSize: "24px", color: BRAND }}>{analysis.growthGuide.externalActivity}</b>
                 </div>
               </div>
-              {/* 셰브론 */}
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <svg width="40" height="44" viewBox="0 0 40 44" fill="none">
-                  <path d="M6 6 L20 22 L6 38" stroke="#c7d2fe" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M20 6 L34 22 L20 38" stroke="#a5b4fc" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+              {/* 화살표 아이콘 — 양쪽 박스 사이에 걸치되, 겹치는 가장자리만 박스 뒤로(z-index 낮음) 숨음 */}
+              <div style={{ position: "relative", zIndex: 0, display: "flex", alignItems: "center", flexShrink: 0, marginLeft: "-14px", marginRight: "-14px" }}>
+                <img src="/roadmap_growth_arrow_icon.svg" alt="" style={{ height: "180px", width: "auto" }} />
               </div>
-              {/* Tip 박스 2개 */}
-              <div style={{ flex: 1, minWidth: "280px", display: "flex", flexDirection: "column", gap: "12px", justifyContent: "center" }}>
-                {analysis.growthGuide.tips.map((tip, i) => (
-                  <div key={i} style={{ background: "#f5f8ff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "16px 20px" }}>
-                    <p style={{ margin: 0, fontSize: "13px", color: "#475569", lineHeight: 1.7 }}>
-                      <span style={{ color: "#ef4444", border: "1.5px solid #ef4444", borderRadius: "6px", padding: "1px 7px", fontSize: "12px", marginRight: "8px" }}>Tip!</span>
-                      {tip}
-                    </p>
-                  </div>
-                ))}
+              {/* Tip 박스 — 하나의 박스 안에 머리말 + 번호 매긴 tips 2개 */}
+              <div style={{ position: "relative", zIndex: 1, flex: "1 1 0", minWidth: "280px", background: "#fff", border: `1.5px solid ${BRAND}`, borderRadius: "14px", padding: "16px 20px", display: "flex", flexDirection: "column", justifyContent: "center", gap: "10px" }}>
+                <p style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ color: "#ef4444", border: "1.5px solid #ef4444", borderRadius: "6px", padding: "1px 7px", fontSize: "12px" }}>Tip!</span>
+                  앞으로 이렇게 해보는 건 어떨까요?
+                </p>
+                <ol style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "6px", listStyleType: "decimal", listStylePosition: "outside" }}>
+                  {analysis.growthGuide.tips.map((tip, i) => (
+                    <li key={i} style={{ fontSize: "13.5px", fontWeight: 600, color: "#1e293b", lineHeight: 1.5 }}>{tip}</li>
+                  ))}
+                </ol>
               </div>
             </div>
             </SectionBoundary>
@@ -568,7 +601,7 @@ export default function RoadmapResult() {
         <div style={{ textAlign: "right", marginTop: "32px" }}>
           <button
             onClick={() => navigate("/roadmap/create", { state: { edit: true } })}
-            style={{ padding: "12px 24px", background: "#e6e9f5", color: BRAND, border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
+            style={{ padding: "12px 24px", background: BRAND, color: "#fff", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
           >
             로드맵 수정하러 가기
           </button>
