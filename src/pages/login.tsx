@@ -1,29 +1,30 @@
 import { useState } from 'react';
-import { setToken } from '../lib/auth';
+import { setToken, isLoggedIn } from '../lib/auth';
 
 export default function LoginPage({ onClose }: { onClose: () => void }) {
   const [showSignup, setShowSignup] = useState(false);
+  const [signupDone, setSignupDone] = useState(false);
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const isMismatch = confirm.length > 0 && password !== confirm;
 
-  const [loginEmail, setLoginEmail] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     setLoginError(null);
-    if (!loginEmail || !loginPassword) {
-      setLoginError("이메일과 비밀번호를 입력해주세요.");
+    if (!studentId || !loginPassword) {
+      setLoginError("학번과 비밀번호를 입력해주세요.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch("/api/auth/smu/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -31,7 +32,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
           "ngrok-skip-browser-warning": "true",
         },
         body: JSON.stringify({
-          email: loginEmail,
+          studentId,
           password: loginPassword,
         }),
       });
@@ -65,14 +66,13 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
 
   const [signupEmail, setSignupEmail] = useState("");
   const [signupUsername, setSignupUsername] = useState("");
-  const [signupNickname, setSignupNickname] = useState("");
   const [signupError, setSignupError] = useState<string | null>(null);
   const [signupLoading, setSignupLoading] = useState(false);
 
   const handleSignup = async () => {
     setSignupError(null);
 
-    if (!signupEmail || !password || !signupNickname || !signupUsername) {
+    if (!signupEmail || !password || !signupUsername) {
       setSignupError("모든 항목을 입력해주세요.");
       return;
     }
@@ -94,7 +94,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
         },
         body: JSON.stringify({
           username: signupUsername,
-          nickname: signupNickname,
+          nickname: signupUsername,
           email: signupEmail,
           password,
         }),
@@ -112,10 +112,8 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
 
       if (data?.accessToken) {
         setToken(data.accessToken, data.refreshToken);
-        onClose();
-      } else {
-        setShowSignup(false);
       }
+      setSignupDone(true);
     } catch (e) {
       setSignupError(
         e instanceof Error
@@ -260,6 +258,13 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
             </h2>
 
             <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>
+                샘물 로그인
+              </p>
+              <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 14px' }}>
+                상명대학교 샘물 계정으로 로그인하세요.
+              </p>
+
               <p
                 style={{
                   fontSize: 13,
@@ -268,15 +273,15 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
                   marginBottom: 6,
                 }}
               >
-                이메일
+                학번
               </p>
 
               <input
-                type="email"
-                placeholder="이메일을 입력해주세요."
+                type="text"
+                placeholder="학번을 입력해주세요."
                 style={inputStyle}
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
                 onKeyDown={(e) =>
                   e.key === 'Enter' && handleLogin()
                 }
@@ -297,7 +302,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
 
               <input
                 type="password"
-                placeholder="비밀번호를 입력해주세요."
+                placeholder="샘물 비밀번호를 입력해주세요."
                 style={inputStyle}
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
@@ -326,7 +331,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               style={{
                 width: '100%',
                 padding: 14,
-                background: loading ? '#c7cbd1' : '#9ca3af',
+                background: loading ? '#c7cbd1' : studentId && loginPassword ? '#00178E' : '#9ca3af',
                 color: '#fff',
                 border: 'none',
                 borderRadius: 10,
@@ -339,18 +344,21 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               {loading ? '로그인 중…' : '로그인'}
             </button>
 
+            <p style={{ textAlign: 'center', fontSize: 12.5, color: '#94a3b8', margin: '0 0 6px' }}>
+              샘물 로그인을 이용하기 어려우신가요?
+            </p>
             <p
               onClick={() => setShowSignup(true)}
               style={{
                 textAlign: 'center',
-                fontSize: 13,
-                color: '#6b7280',
+                fontSize: 13.5,
+                fontWeight: 700,
+                color: '#00178E',
                 cursor: 'pointer',
-                textDecoration: 'underline',
-                textUnderlineOffset: '4px',
+                margin: 0,
               }}
             >
-              아직 회원이 아니신가요?
+              이메일로 회원가입하기 →
             </p>
           </div>
         </div>
@@ -395,6 +403,43 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               ✕
             </button>
 
+            {signupDone ? (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>
+                  대학원 준비,
+                </h2>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '0 0 24px' }}>
+                  한 곳에서 끝내는 H-AI Grad
+                </h2>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#1e293b', marginBottom: 28 }}>
+                  회원가입이 완료되었습니다.
+                </p>
+                <button
+                  onClick={() => {
+                    if (isLoggedIn()) {
+                      onClose();
+                    } else {
+                      setShowSignup(false);
+                      setSignupDone(false);
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: 14,
+                    background: '#00178E',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 10,
+                    fontWeight: 700,
+                    fontSize: 15,
+                    cursor: 'pointer',
+                  }}
+                >
+                  로그인하러 가기
+                </button>
+              </div>
+            ) : (
+              <>
             <h2
               style={{
                 textAlign: 'center',
@@ -527,28 +572,6 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              <div>
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#475569',
-                    marginBottom: 6,
-                  }}
-                >
-                  닉네임
-                </p>
-
-                <input
-                  placeholder="닉네임을 입력해주세요."
-                  style={inputStyle}
-                  value={signupNickname}
-                  onChange={(e) =>
-                    setSignupNickname(e.target.value)
-                  }
-                />
-              </div>
-
               {signupError && (
                 <p
                   style={{
@@ -584,6 +607,8 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
                 {signupLoading ? '가입 중…' : '회원가입'}
               </button>
             </div>
+              </>
+            )}
           </div>
         </div>
       )}
