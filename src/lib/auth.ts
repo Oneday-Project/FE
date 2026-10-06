@@ -52,7 +52,11 @@ export type Me = {
   id: number
   username: string   // 이름
   nickname: string   // 닉네임
-  email: string      // 아이디
+  email: string | null            // 이메일(테스트 계정만 존재)
+  studentId: string | null        // 학번 (샘물 로그인 유저 식별자)
+  department: string | null       // 학과
+  secondDepartment: string | null // 복수전공
+  authProvider: 'local' | 'smu'
   role: string       // ADMIN | USER
   bookmarkPapers?: unknown[]
 }
