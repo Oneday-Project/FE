@@ -18,6 +18,18 @@ import {
 
 const sideMenuItems = ['북마크한 논문', '읽고 있는 논문', '다 읽은 논문']
 
+// 학번 앞 4자리 = 입학년도 → 현재 날짜 기준 학년·학기 계산 (예: 202310847 → 2026년 10월 → 4학년 2학기)
+function gradeSemester(studentId: string | null | undefined): string | null {
+  const entry = Number(studentId?.slice(0, 4))
+  if (!entry) return null
+  const now = new Date()
+  const m = now.getMonth() + 1
+  const grade = now.getFullYear() - entry + (m >= 3 ? 1 : 0)
+  if (grade < 1) return null
+  const semester = m >= 3 && m <= 8 ? 1 : 2
+  return `${grade}학년 ${semester}학기`
+}
+
 export default function MyPage() {
   const navigate = useNavigate()
   const [activeMenu, setActiveMenu] = useState('프로필 수정')
@@ -144,17 +156,17 @@ export default function MyPage() {
           {/* 메인 콘텐츠 */}
           <div>
 
-            {/* 프로필 수정 */}
+            {/* 프로필 수정 — 샘물 계정: 이름·닉네임·학번·학과·학년학기 / 이메일 계정: 이름·닉네임·이메일 */}
             {activeMenu === '프로필 수정' && (
               <div style={{
-                background: '#fff', borderRadius: '20px', padding: '40px 48px',
-                border: '1px solid #e5e7eb', boxShadow: '0 2px 20px rgba(0,0,0,0.04)',
+                background: '#fff', borderRadius: '36px', padding: '36px 28px',
+                border: '1px solid #b8bcc4', minHeight: '250px', boxSizing: 'border-box',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '36px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '36px' }}>
                   <div style={{ position: 'relative', flexShrink: 0 }}>
                     <div style={{
-                      width: '80px', height: '80px', borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #aeb4bd 0%, #c8ccd4 100%)',
+                      width: '76px', height: '76px', borderRadius: '50%',
+                      background: '#b3b3b3',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       overflow: 'hidden',
                     }}>
@@ -174,7 +186,7 @@ export default function MyPage() {
                       onClick={() => fileInputRef.current?.click()}
                       style={{
                         position: 'absolute', bottom: 0, right: 0,
-                        width: '24px', height: '24px', cursor: 'pointer',
+                        width: '18px', height: '18px', cursor: 'pointer',
                       }}
                     />
                     <input
@@ -185,44 +197,28 @@ export default function MyPage() {
                       style={{ display: 'none' }}
                     />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <span style={{ fontSize: '15px', color: '#6b7280' }}>이름</span>
-                    <span style={{ fontSize: '15px', fontWeight: 600, color: '#1a1a1a' }}>{me?.username ?? ''}</span>
-                  </div>
-                </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-                    <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>닉네임</span>
-                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>{me?.nickname ?? ''}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', paddingTop: '2px' }}>
+                    {(me?.studentId
+                      ? [
+                          ['이름', me.username],
+                          ['닉네임', me.nickname],
+                          ['학번', me.studentId],
+                          ['학과', [me.department, me.secondDepartment].filter(Boolean).join(' / ')],
+                          ['학년·학기', gradeSemester(me.studentId)],
+                        ]
+                      : [
+                          ['이름', me?.username],
+                          ['닉네임', me?.nickname],
+                          ['이메일', me?.email],
+                        ]
+                    ).map(([label, value]) => (
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', fontSize: '13px' }}>
+                        <span style={{ width: '56px', color: '#6b7280', flexShrink: 0 }}>{label}</span>
+                        <span style={{ marginLeft: '12px', color: '#1a1a1a', fontWeight: 500 }}>{value ?? ''}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-                    <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>이메일</span>
-                    <span style={{ fontSize: '14px', color: '#9ca3af' }}>{me?.email ?? ''}</span>
-                  </div>
-                  {/* 비밀번호 변경 기능 미사용 — 회원가입 시 설정한 비밀번호로만 로그인 (필요 시 주석 해제)
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '15px', color: '#374151', width: '80px', flexShrink: 0 }}>비밀번호</span>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••"
-                      style={{
-                        flex: 1, padding: '12px 16px', fontSize: '14px',
-                        border: '1px solid #d1d5db', borderRadius: '10px',
-                        outline: 'none', color: '#374151', background: '#fff',
-                      }}
-                    />
-                    <button style={{
-                      padding: '12px 20px', fontSize: '14px', fontWeight: 500,
-                      background: '#1e3a8a', color: '#fff', border: 'none',
-                      borderRadius: '10px', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
-                    }}>
-                      비밀번호 변경
-                    </button>
-                  </div>
-                  */}
                 </div>
               </div>
             )}
