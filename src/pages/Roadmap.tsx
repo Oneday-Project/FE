@@ -54,8 +54,8 @@ const questions: Question[] = [
 
   { type: "section", label: "실전 경험" },
 
-  { id: "q5", type: "single", title: "Q5. 프로젝트 또는 대회 참여 경험은?", options: ["0회", "1~3회", "3~5회", "5~8회", "10회 이상"] },
-  { id: "q6", type: "single", title: "Q6. 연구실 인턴 경험이 있나요?", options: ["없음", "3개월 이하", "3~6개월", "6개월~1년", "1년 이상"] },
+  { id: "q5", type: "single", title: "Q5. 프로젝트 또는 대회 참여 경험은?", options: ["0회", "1~3회", "4~6회", "7~9회", "10회 이상"] },
+  { id: "q6", type: "single", title: "Q6. 연구실 인턴 경험이 있나요?", options: ["없음", "1~3개월", "4~6개월", "7개월~1년", "1년 이상"] },
 
   { type: "section", label: "논문 역량" },
 
@@ -67,7 +67,7 @@ const questions: Question[] = [
     options: ["거의 이해하지 못해요.", "요약만 이해할 수 있어요.", "거의 이해할 수 있어요.", "정리 및 요약이 가능해요.", "완벽히 이해하고 발표할 수 있어요."],
   },
 
-  { type: "section", label: "대외 활동 (복수 선택)" },
+  { type: "section", label: "포트폴리오 (복수 선택)" },
 
   { id: "q9", type: "multi", title: "Q9. 대학원 진학을 위해 현재 준비된 항목을 모두 선택해 주세요.", options: ["아직 아무 것도 없어요", "GitHub 포트폴리오", "CV(이력서)", "연구·학습 기록용 Notion", "공인 영어 성적 (TOEIC, TOEFL, OPIC 등)"] },
   { id: "q10", type: "multi", title: "Q10. 기술 또는 연구 관련 발표 경험이 있나요?", options: ["없음", "수업 프로젝트 발표", "동아리/스터디 발표", "교내 학술 발표", "학회 발표"] },
