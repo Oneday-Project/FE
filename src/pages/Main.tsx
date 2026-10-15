@@ -345,7 +345,7 @@ function AskHaiSection() {
 
   return (
     <section style={{ marginBottom: "56px", textAlign: "center", position: "relative" }}>
-      <img src="/main_ask_hai_deco_icon.svg" alt="" style={{ position: "absolute", top: "-350px", right: "-350px" }} />
+      <img src="/main_ask_hai_deco_icon.svg" alt="" style={{ position: "absolute", top: "-300px", right: "-450px", zIndex: 0 }} />
       <h2 style={{ margin: "0 0 20px" }}>
         <svg width="420" height="50" viewBox="0 0 420 50" style={{ display: "block", margin: "0 auto" }}>
           <defs>
@@ -360,7 +360,7 @@ function AskHaiSection() {
           </text>
         </svg>
       </h2>
-      <div style={{ background: "#fff", borderRadius: "64px", padding: "32px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
+      <div style={{ position: "relative", zIndex: 1, background: "#fff", borderRadius: "64px", padding: "32px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
         {messages.length > 0 ? (
           <div style={{ marginBottom: "18px" }}>
             <img src="/logo.svg" alt="" style={{ height: "26px", width: "auto" }} />
