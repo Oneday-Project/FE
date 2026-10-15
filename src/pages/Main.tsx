@@ -252,9 +252,21 @@ function SummaryCard({
 /* ── 인사말 아래 학기 + 관심분야 태그 줄 (로드맵 만든 적 있을 때만) ── */
 function RoadmapInfoRow({ year, semester, tags }: { year: number; semester: number; tags: string[] }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: HERO_GAP }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        flexWrap: "wrap",
+        justifyContent: "center",
+        background: "#fff",
+        borderRadius: "999px",
+        padding: "10px 22px",
+        boxShadow: "0 4px 16px rgba(15,23,42,0.06)",
+      }}
+    >
       <img src="/main_semester_icon.svg" alt="" width={25} height={25} />
-      <span style={{ fontSize: "14px", fontWeight: 400, color: INK_80 }}>{year}학년 {semester}학기</span>
+      <span style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b" }}>{year}학년 {semester}학기</span>
       <span style={{ width: "1px", height: "14px", background: "rgba(60,60,67,0.25)" }} />
       <span style={{ fontSize: "14px", fontWeight: 400, color: INK_80 }}>관심 분야</span>
       {tags.map((tag) => (
@@ -332,11 +344,23 @@ function AskHaiSection() {
   };
 
   return (
-    <section style={{ marginBottom: "56px", textAlign: "center" }}>
-      <h2 style={{ margin: "0 0 20px", textAlign: "center" }}>
-        <img src="/main_ask_hai_title.svg" alt="H-AI에게 물어보기" height={52} style={{ display: "inline-block" }} />
+    <section style={{ marginBottom: "56px", textAlign: "center", position: "relative" }}>
+      <img src="/main_ask_hai_deco_icon.svg" alt="" style={{ position: "absolute", top: "-350px", right: "-350px" }} />
+      <h2 style={{ margin: "0 0 20px" }}>
+        <svg width="420" height="50" viewBox="0 0 420 50" style={{ display: "block", margin: "0 auto" }}>
+          <defs>
+            <linearGradient id="askHaiTitleGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#000000" />
+              <stop offset="29%" stopColor="#2657C7" />
+              <stop offset="100%" stopColor="#4C96FF" />
+            </linearGradient>
+          </defs>
+          <text x="50%" y="34" textAnchor="middle" fontFamily="'Pretendard', sans-serif" fontWeight={700} fontSize={36} fill="url(#askHaiTitleGradient)">
+            H-AI에게 물어보기
+          </text>
+        </svg>
       </h2>
-      <div style={{ background: "#fff", borderRadius: "24px", padding: "32px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
+      <div style={{ background: "#fff", borderRadius: "64px", padding: "32px 36px", boxShadow: "0 12px 40px rgba(15,23,42,0.06)" }}>
         {messages.length > 0 ? (
           <div style={{ marginBottom: "18px" }}>
             <img src="/logo.svg" alt="" style={{ height: "26px", width: "auto" }} />
@@ -412,7 +436,7 @@ function AskHaiSection() {
 
         {error && <p style={{ fontSize: "12.5px", color: "#ef4444", textAlign: "left", margin: "0 0 10px" }}>{error}</p>}
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", borderRadius: "14px", padding: "8px 8px 8px 18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#fff", border: "1px solid #d1d5db", borderRadius: "48px", padding: "8px 8px 8px 18px" }}>
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -545,7 +569,7 @@ function ContinueReadingSection() {
   const shown = reading.slice(current * CARDS_PER_PAGE, current * CARDS_PER_PAGE + CARDS_PER_PAGE);
 
   return (
-    <section style={{ marginTop: "64px" }}>
+    <section style={{ marginTop: "88px" }}>
       <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1e293b", margin: "0 0 4px" }}>이어서 읽어볼까요?</h2>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "12px", margin: "0 0 20px" }}>
         <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>읽는 중인 논문을 이어서 확인해보세요.</p>
@@ -719,16 +743,20 @@ export default function Main() {
   const latestTags = myRoadmap?.hasRoadmap ? myRoadmap.latest?.result.overview.interestFields ?? [] : [];
 
   return (
-    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "160px" }}>
+    <div style={{ ...pageContainer, paddingTop: "72px", paddingBottom: "200px" }}>
       {/* 인사말 */}
-      <div style={{ marginBottom: latestAnswers ? "16px" : HERO_GAP }}>
-        <h1 style={{ ...pageTitle, fontWeight: 400 }}>안녕하세요, {nickname || "회원"}님!</h1>
-        <p style={pageSubtitle}>오늘 필요한 대학원 준비를 이어가보세요.</p>
+      <div style={{ marginBottom: latestAnswers ? "36px" : HERO_GAP, textAlign: "center" }}>
+        <h1 style={{ ...pageTitle, fontWeight: 400, textAlign: "center" }}>
+          안녕하세요, <span style={{ color: "#4C96FF" }}>{nickname || "회원"}</span>님!
+        </h1>
+        <p style={{ ...pageSubtitle, textAlign: "center", fontSize: "17px", color: "#1e293b" }}>오늘 필요한 대학원 준비를 이어가보세요.</p>
       </div>
 
       {/* 학기 + 관심 분야 태그 — 로드맵을 만든 적 있을 때만 */}
       {latestAnswers && (
-        <RoadmapInfoRow year={latestAnswers.year} semester={latestAnswers.semester} tags={latestTags} />
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: "80px" }}>
+          <RoadmapInfoRow year={latestAnswers.year} semester={latestAnswers.semester} tags={latestTags} />
+        </div>
       )}
 
       {/* H-AI에게 물어보기 */}
@@ -736,7 +764,7 @@ export default function Main() {
 
       {/* 나의 대학원 준비 현황 — 박스는 그대로 두고, 화면 좌우 끝까지 흰 배경이 꽉 차게(풀블리드) 깔고
           그 안에서 본문 내용만 다시 pageContainer 폭으로 가운데 정렬 */}
-      <section style={{ marginBottom: "20px", background: "#fff", padding: "32px 0", width: "100vw", marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}>
+      <section style={{ marginBottom: "20px", background: "#fff", padding: "32px 0 72px", width: "100vw", marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}>
         <div style={pageContainer}>
           <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1e293b", margin: "0 0 4px" }}>나의 대학원 준비 현황</h2>
           <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 24px" }}>논문 활동과 로드맵을 한눈에 확인해보세요.</p>
@@ -754,7 +782,7 @@ export default function Main() {
 
       {/* 다음 준비를 이어가보세요 — 풀블리드 흰 배경 (푸터도 흰색이라, Main 루트의 paddingBottom 이
           이 섹션과 푸터 사이에 하늘색 여백으로 남아서 둘이 바로 안 붙어 보이게 함) */}
-      <section style={{ marginTop: "64px", background: "#fff", padding: "32px 0", width: "100vw", marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}>
+      <section style={{ marginTop: "96px", background: "#fff", padding: "64px 0", width: "100vw", marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}>
         <div style={pageContainer}>
           <h2 style={{ fontSize: "22px", fontWeight: 600, color: "#1e293b", margin: "0 0 4px" }}>다음 준비를 이어가보세요</h2>
           <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 24px" }}>더 많은 기능으로 대학원 준비를 체계적으로.</p>
