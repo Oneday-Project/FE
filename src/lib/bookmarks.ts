@@ -25,6 +25,9 @@ let loading: Promise<void> | null = null
    generation 이 달라서 캐시를 덮어쓰지 못한다. */
 let generation = 0
 const listeners = new Set<() => void>()
+/* 토글 요청이 진행 중인 arxivId. 같은 논문을 빠르게 연타했을 때
+   POST+syncFromServer 가 겹쳐서 돌다가 완료 순서가 뒤바뀌어 화면이 엉키는 걸 막는다. */
+const inFlight = new Set<string>()
 
 function emit(next: BookmarkMap): void {
   cache = next
@@ -111,6 +114,8 @@ export function isBookmarked(arxivId: string): boolean {
 export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
   const token = getToken()
   if (!token) return
+  if (inFlight.has(paper.arxivId)) return   // 이미 처리 중이면 연타 무시
+  inFlight.add(paper.arxivId)
 
   const before = cache
   const next = { ...cache }
@@ -146,6 +151,8 @@ export async function toggleBookmark(paper: BookmarkedPaper): Promise<void> {
     console.error(
       `북마크 ${adding ? '추가' : '해제'} 실패:`, paper.arxivId, '→', url.replace('/api', ''), e,
     )
+  } finally {
+    inFlight.delete(paper.arxivId)
   }
 }
 
