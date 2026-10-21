@@ -11,6 +11,18 @@ import { askChatbot, type ChatHistoryItem } from "../lib/chatbot";
 
 const BRAND = "#00178E";
 
+/* auth-change 이벤트(로그인/로그아웃 시 lib/auth.ts 가 발생시킴)가 올 때마다 값이 바뀌는 훅.
+   effect의 의존성 배열에 넣어서, 로그인 모달만 닫고 페이지 이동이 없어도 사용자 정보를 다시 불러오게 함 */
+function useAuthChangeTick() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const onChange = () => setTick((t) => t + 1);
+    window.addEventListener("auth-change", onChange);
+    return () => window.removeEventListener("auth-change", onChange);
+  }, []);
+  return tick;
+}
+
 /* ── 미니 캘린더 ─────────────────────────────────────────
    reading = 읽는 중(연한 파랑), completed = 읽기 완료(진한 파랑)
    GET /papers/reading-status/calendar?year=&month= 로 달별 조회 (비로그인이면 호출 안 함) */
@@ -20,6 +32,7 @@ function MiniCalendar() {
   const [calendar, setCalendar] = useState<ReadingCalendar | null>(null);
 
   const { year, month } = cursor;
+  const authTick = useAuthChangeTick();
 
   useEffect(() => {
     if (!getToken()) return;
@@ -30,7 +43,7 @@ function MiniCalendar() {
       .catch(() => { if (!cancelled) setCalendar(null); });
 
     return () => { cancelled = true; };
-  }, [year, month]);
+  }, [year, month, authTick]);
 
   const dayStatus: Record<number, "reading" | "completed"> = {};
   calendar?.days.forEach((d) => {
@@ -724,9 +737,15 @@ export default function Main() {
 
   const [myRoadmap, setMyRoadmap] = useState<MyRoadmap | null>(null);
 
+  const authTick = useAuthChangeTick();
+
   useEffect(() => {
-    fetchMe().then((me) => setNickname(me?.nickname ?? ""));
-  }, []);
+    let cancelled = false;
+
+    fetchMe().then((me) => { if (!cancelled) setNickname(me?.nickname ?? ""); });
+
+    return () => { cancelled = true; };
+  }, [authTick]);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -737,7 +756,7 @@ export default function Main() {
       .catch(() => { /* 조회 실패해도 카드 쪽 빈 상태로 자연스럽게 처리됨 */ });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [authTick]);
 
   const latestAnswers = myRoadmap?.hasRoadmap ? myRoadmap.latest?.answers : undefined;
   const latestTags = myRoadmap?.hasRoadmap ? myRoadmap.latest?.result.overview.interestFields ?? [] : [];

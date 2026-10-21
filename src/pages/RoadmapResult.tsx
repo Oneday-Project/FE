@@ -342,7 +342,7 @@ export default function RoadmapResult() {
   }
 
   const tags = analysis.overview.interestFields ?? [];
-  const commentLines = analysis.overview.comment.split("\n");
+  const commentLines = analysis.overview.comment?.split("\n") ?? [];
 
   // recommended 는 기초 과목에도 항상 true 라서 쓸 수 없음 — 관심분야와 실제로 겹치는 과목이 있는지로 판단
   const matchedMajorCourses = (majorCourses?.years ?? [])
