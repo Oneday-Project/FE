@@ -742,7 +742,7 @@ export default function Main() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchMe().then((me) => { if (!cancelled) setNickname(me?.nickname ?? ""); });
+    fetchMe().then((me) => { if (!cancelled) setNickname(me?.username ?? ""); });
 
     return () => { cancelled = true; };
   }, [authTick]);

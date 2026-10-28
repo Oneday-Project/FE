@@ -34,7 +34,7 @@ export default function Navbar() {
       setIsLoggedIn(logged)
       if (logged) {
         // 로그인 상태면 /users/me 에서 실제 닉네임을 받아와 표시
-        fetchMe().then(me => setNickname(me?.nickname ?? ''))
+        fetchMe().then(me => setNickname(me?.username ?? ''))
       } else {
         setNickname('')
       }
