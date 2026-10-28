@@ -104,7 +104,8 @@ export default function PaperDetail({
   const year = getYear(paper.publishedDate)
   const chips = getFieldNames(paper)
   const authors = getAuthorNames(paper)
-  const doiText = paper.doi || paper.arxivId || '-'
+  // DOI 가 없으면 아이콘·라벨만 두고 값 칸은 비운다 (arxivId 로 대신 채우지 않음)
+  const doiText = paper.doi?.trim() ?? ''
   const importance = clampStarTier(paper.starTier)
 
   /* 함께 보면 좋은 논문 — 추천 API(/similar, 백엔드가 계산한 similarity 순) 결과를 순서 그대로 보여준다.
@@ -311,7 +312,9 @@ export default function PaperDetail({
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <span style={{ color: INK, flexShrink: 0 }}>저자</span>
               <span style={{ color: INK_80 }}>
-                {authors.length > 0 ? authors.join(' ') : '저자 정보 없음'}
+                {authors.names.length > 0
+                  ? `${authors.names.join(', ')}${authors.more > 0 ? ` 외 ${authors.more}명` : ''}`
+                  : '저자 정보 없음'}
               </span>
             </div>
           </div>
@@ -927,8 +930,8 @@ function getAuthorNames(paper: Paper) {
   const authors = raw
     .map(author => (typeof author === 'string' ? author : (author as { name?: string })?.name))
     .filter((name): name is string => Boolean(name))
-  if (authors.length <= 3) return authors
-  return [...authors.slice(0, 3), `외 ${authors.length - 3}명`]
+  // 앞 3명만 이름으로, 나머지는 '외 N명' 으로 붙인다 (화면에서 쉼표로 이어 붙임)
+  return { names: authors.slice(0, 3), more: Math.max(0, authors.length - 3) }
 }
 
 function clampStarTier(value?: number) {
