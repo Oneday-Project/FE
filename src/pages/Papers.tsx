@@ -46,6 +46,7 @@ export type Paper = {
   pdfUrl: string
   bookmarkCount: number
   starTier: number
+  lab?: string               // 휴먼AI 논문만 — 지도 교수 연구실 (예: "이의철 교수 연구실")
 }
 
 // vite.config.ts의 proxy 설정 덕분에 '/api'로 시작하면 ngrok 주소로 자동 연결됨
@@ -86,6 +87,7 @@ function toPaper(hai: HaiPaper): Paper {
     // 휴먼AI 응답도 researchFields(["ML","CV"])를 내려준다. 없을 때만 학과명으로 대체
     researchFields: hai.researchFields ?? (hai.department ? [hai.department] : []),
     publishedDate: hai.publishedYear ? `${hai.publishedYear}-01-01` : '',
+    lab: hai.department || undefined,   // 응답의 department 에 "OOO 교수 연구실" 이 들어온다
     citationCount: 0,
     influenceScore: 0,
     journal: '',
