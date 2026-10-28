@@ -125,6 +125,50 @@ const tagStyle = (selected: boolean) => ({
 const filterLabel = { fontSize: '16px', fontWeight: 500, color: INK, flexShrink: 0 } as const
 
 const STAR_ON = '#FFF188'   // 선택된 중요도 별
+
+/* 기간 설정 날짜 입력 범위 — DB 에서 가장 오래된 논문 발행일(1992-07-01)부터 오늘까지 */
+const MIN_PUBLISHED_DATE = '1992-07-01'
+
+/* <input type="date"> 값 형식(YYYY-MM-DD). toISOString 은 UTC 라 한국 시간 새벽에 하루 밀려서 직접 만든다 */
+function toDateInput(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function todayInput(): string {
+  return toDateInput(new Date())
+}
+
+// 2/29 처럼 해당 연도에 없는 날짜는 Date 가 알아서 3/1 로 넘겨준다
+function shiftYears(date: string, years: number): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setFullYear(d.getFullYear() + years)
+  return toDateInput(d)
+}
+
+/* 기간 설정 날짜 입력 — 선택된 태그와 같은 테두리·글꼴로 맞춘다 */
+function DateField({ label, value, min, max, onChange }: {
+  label: string; value: string; min: string; max: string; onChange: (v: string) => void
+}) {
+  return (
+    <input
+      type="date"
+      aria-label={label}
+      value={value}
+      min={min}
+      max={max}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        ...TAG_BASE,
+        border: `1.2px solid ${MAIN}`,
+        padding: '7px 12px',
+        fontSize: '14px',
+        fontWeight: 500,
+        color: MAIN,
+        outline: 'none',
+      }}
+    />
+  )
+}
 const STAR_OFF = INK_80     // 미선택 별 (#3C3C43 80%)
 
 
@@ -152,6 +196,8 @@ export default function Papers() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [importance, setImportance] = useState<number | null>(null)          // 중요도: 1개만 (미선택 가능)
   const [period, setPeriod] = useState<'1y' | '3y' | '5y' | 'custom' | null>(null) // 연도: 1개만 (미선택 가능)
+  // '기간 설정' 을 골랐을 때 쓰는 직접 입력 기간 (YYYY-MM-DD). 처음엔 최근 3년 ~ 오늘로 채워 둔다
+  const [customRange, setCustomRange] = useState(() => ({ start: shiftYears(todayInput(), -3), end: todayInput() }))
   const [searchValue, setSearchValue] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   // 마지막으로 서버에 실제로 보낸 키워드 (입력 중인 값과 구분 — 정렬·안내 문구에 사용)
@@ -244,9 +290,16 @@ export default function Papers() {
       // 중요도: starTier(1~3)
       if (importance != null) params.set('starTier', String(importance))
 
-      // 연도: 최근 N년 (기간 직접 설정 'custom'은 날짜 입력 UI가 없어 아직 미연결)
+      // 연도: 최근 N년
       const yearRange = period === '1y' ? 1 : period === '3y' ? 3 : period === '5y' ? 5 : null
       if (yearRange) params.set('yearRange', String(yearRange))
+
+      // 기간 직접 설정: 발행일(publishedDate) 기준 startDate ~ endDate.
+      // 백엔드는 한쪽만 와도 처리한다(시작일만 → 오늘까지). 비운 칸은 보내지 않는다
+      if (period === 'custom') {
+        if (customRange.start) params.set('startDate', customRange.start)
+        if (customRange.end) params.set('endDate', customRange.end)
+      }
 
       const query = params.toString()
       return `${API_PREFIX}/papers${query ? `?${query}` : ''}`
@@ -522,6 +575,29 @@ export default function Papers() {
                 </button>
               ))}
             </div>
+            {/* 기간 설정을 고르면 연도 줄 아래에 날짜 입력이 열린다 (라벨 폭만큼 들여서 버튼 줄과 맞춤) */}
+            {period === 'custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '-4px' }}>
+                <span aria-hidden style={{ ...filterLabel, visibility: 'hidden' }}>연도</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <DateField
+                    label="시작일"
+                    value={customRange.start}
+                    min={MIN_PUBLISHED_DATE}
+                    max={customRange.end || todayInput()}
+                    onChange={start => setCustomRange(r => ({ ...r, start }))}
+                  />
+                  <span style={{ fontSize: '14px', color: INK_80 }}>~</span>
+                  <DateField
+                    label="종료일"
+                    value={customRange.end}
+                    min={customRange.start || MIN_PUBLISHED_DATE}
+                    max={todayInput()}
+                    onChange={end => setCustomRange(r => ({ ...r, end }))}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
             {/* 라벨은 '분야 ⓘ' 로 짧게 — "(최대 3개)" 를 그대로 두면 태그 줄이 들어갈 폭이 안 남는다.

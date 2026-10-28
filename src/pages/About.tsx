@@ -290,7 +290,7 @@ function GradIntro() {
   )
 }
 
-function MajorCard({ name, tags, desc }: Major) {
+function MajorCard({ name, tags, desc, url }: Major) {
   return (
     <div style={{
       background: '#fff', borderRadius: f(12), height: f(216), boxSizing: 'border-box',
@@ -306,7 +306,7 @@ function MajorCard({ name, tags, desc }: Major) {
             {tags.map(tag => <span key={tag} style={TAG}>{tag}</span>)}
           </div>
           <a
-            href="https://hi.smu.ac.kr/hi/index.do"
+            href={url}
             target="_blank"
             rel="noreferrer"
             style={{ fontSize: f(20), fontWeight: 500, color: INK_80, textDecoration: 'none', whiteSpace: 'nowrap' }}
@@ -393,7 +393,8 @@ const TAG: CSSProperties = {
 
 type Feature = { icon: string; title: string; desc: string[] }
 type Member = { name: string; studentId: string; role: string; img: string; x: number; y: number }
-type Major = { name: string; tags: string[]; desc: string[] }
+/* url: '자세히 보기' 링크 — 휴먼AI공학전공 홈페이지 대학원 소개(hi.smu.ac.kr/hi/graduate/intro.do) 메뉴에 걸린 학과별 주소 */
+type Major = { name: string; tags: string[]; desc: string[]; url: string }
 
 const features: Feature[] = [
   {
@@ -434,6 +435,7 @@ const majors: Major[] = [
   {
     name: '스포츠ICT융합학과',
     tags: ['ML', 'CV', 'NLP', 'Retrieval AI'],
+    url: 'https://sportsict.smu.ac.kr/',
     desc: [
       '스포츠와 첨단 ICT 기술을 융합해 미래 스포츠산업을 연구하는 대학원 과정입니다.',
       '',
@@ -443,6 +445,7 @@ const majors: Major[] = [
   {
     name: '감성공학과',
     tags: ['HCI', 'Multimodal', 'SAP', 'ML'],
+    url: 'https://ee.smu.ac.kr/ee/education/curriculum.do',
     desc: [
       '인간의 감정과 행동을 인식하고 이해하는 기술을 연구하는 대학원 과정입니다.',
       '',
@@ -451,8 +454,10 @@ const majors: Major[] = [
     ],
   },
   {
-    name: '지능정보공학과',
+    /* 지능정보공학과가 AI공학과로 이름이 바뀜 (일반대학원 학과안내 기준) */
+    name: 'AI공학과',
     tags: ['SAP', 'ML', 'CV', 'Multimodal'],
+    url: 'https://grad.smu.ac.kr/grad/department/introduction57.do#tab14426',
     desc: [
       'AI 기술과 데이터 처리 시스템을 심화 연구하는 대학원 과정입니다.',
       '',
