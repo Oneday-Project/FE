@@ -505,10 +505,10 @@ export default function Papers() {
       <div style={{ ...pageContainer, paddingTop: PAGE_TOP, paddingBottom: '60px' }}>
         {/* Hero 섹션 */}
         <div style={{ marginBottom: HERO_GAP }}>
-          <h1 style={pageTitle}>
-            내 분야 논문, 한 번에.
+          <h1 style={{ ...pageTitle, fontWeight: 600, letterSpacing: "-0.5px" }}>
+            내 분야 논문, 한 번에
           </h1>
-          <p style={pageSubtitle}>
+          <p style={{ ...pageSubtitle, fontWeight: 500 }}>
             관심 분야를 고르면 최신 트렌드 논문을 정리해드려요.
           </p>
         </div>
