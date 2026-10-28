@@ -59,7 +59,7 @@ const questions: Question[] = [
 
   { type: "section", label: "논문 역량" },
 
-  { id: "q7", type: "single", title: "Q7. 한 달에 논문을 몇 편 정도 읽나요? (요약/정리 포함 여부 무관)", options: ["없음", "1~3편", "4~10편", "11~20편", "20편 이상"] },
+  { id: "q7", type: "single", title: "Q7. 한 달에 논문을 몇 편 정도 읽나요? (요약/정리 포함 여부 무관)", options: ["없음", "1~3편", "4~6편", "7~9편", "10편 이상"] },
   {
     id: "q8",
     type: "single",
