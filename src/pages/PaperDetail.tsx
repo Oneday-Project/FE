@@ -867,7 +867,7 @@ function toRelatedPaper(raw: unknown): Paper | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
 
-  const isHai = r.type === 'hai'
+  const isHai = r.type === 'hai_paper' || r.type === 'hai'   // 서버 값은 hai_paper
   const rawId = r.arxivId ?? r.id
   if (rawId == null) return null
   const arxivId = isHai ? `hai-${rawId}` : String(rawId)
