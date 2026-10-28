@@ -3,6 +3,7 @@ import { setToken, isLoggedIn } from '../lib/auth';
 
 export default function LoginPage({ onClose }: { onClose: () => void }) {
   const [showSignup, setShowSignup] = useState(false);
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [signupDone, setSignupDone] = useState(false);
 
   const [password, setPassword] = useState("");
@@ -61,6 +62,61 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [emailLoginEmail, setEmailLoginEmail] = useState("");
+  const [emailLoginPassword, setEmailLoginPassword] = useState("");
+  const [emailLoginError, setEmailLoginError] = useState<string | null>(null);
+  const [emailLoginLoading, setEmailLoginLoading] = useState(false);
+
+  const handleEmailLogin = async () => {
+    setEmailLoginError(null);
+    if (!emailLoginEmail || !emailLoginPassword) {
+      setEmailLoginError("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    setEmailLoginLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          email: emailLoginEmail,
+          password: emailLoginPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const msg = Array.isArray(data?.message)
+          ? data.message.join("\n")
+          : data?.message ?? "로그인에 실패했습니다.";
+
+        throw new Error(msg);
+      }
+
+      if (!data?.accessToken) {
+        throw new Error("응답에서 accessToken을 찾지 못했습니다.");
+      }
+
+      setToken(data.accessToken, data.refreshToken);
+      onClose();
+    } catch (e) {
+      setEmailLoginError(
+        e instanceof Error
+          ? e.message
+          : "로그인 중 오류가 발생했습니다."
+      );
+    } finally {
+      setEmailLoginLoading(false);
     }
   };
 
@@ -177,7 +233,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               position: 'absolute',
               left: '-40px',
               bottom: '25%',
-              width: '400px',
+              width: '460px',
               transform: 'rotate(8deg)',
               filter:
                 'drop-shadow(0 18px 18px rgba(0, 0, 0, 0.18))',
@@ -193,7 +249,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               position: 'absolute',
               right: '-45px',
               top: '35%',
-              width: '400px',
+              width: '460px',
               transform: 'rotate(8deg)',
               filter:
                 'drop-shadow(0 18px 18px rgba(0, 0, 0, 0.18))',
@@ -338,34 +394,38 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
                 fontSize: 15,
                 fontWeight: 600,
                 cursor: loading ? 'default' : 'pointer',
-                marginBottom: 16,
+                marginBottom: 28,
               }}
             >
               {loading ? '로그인 중…' : '로그인'}
             </button>
 
-            <p style={{ textAlign: 'center', fontSize: 12.5, color: '#94a3b8', margin: '0 0 6px' }}>
+            <div style={{ width: '100%', height: '1px', background: '#e5e7eb', margin: '0 0 16px' }} />
+
+            <p style={{ textAlign: 'center', fontSize: 14, fontWeight: 500, color: '#94a3b8', margin: '0 0 6px' }}>
               샘물 로그인을 이용하기 어려우신가요?
             </p>
             <p
-              onClick={() => setShowSignup(true)}
+              onClick={() => setShowEmailLogin(true)}
               style={{
                 textAlign: 'center',
-                fontSize: 13.5,
-                fontWeight: 700,
-                color: '#00178E',
+                fontSize: 14,
+                fontWeight: 500,
+                color: 'rgba(0,23,142,0.6)',
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px',
                 cursor: 'pointer',
                 margin: 0,
               }}
             >
-              이메일로 회원가입하기 →
+              이메일로 로그인하기 →
             </p>
           </div>
         </div>
       </div>
 
-      {/* ── 회원가입 모달 ── */}
-      {showSignup && (
+      {/* ── 이메일 로그인 / 회원가입 모달 ── */}
+      {(showSignup || showEmailLogin) && (
         <div
           style={{
             position: 'fixed',
@@ -389,7 +449,7 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
             }}
           >
             <button
-              onClick={() => setShowSignup(false)}
+              onClick={() => { setShowSignup(false); setShowEmailLogin(false); }}
               style={{
                 position: 'absolute',
                 top: 16,
@@ -403,7 +463,79 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
               ✕
             </button>
 
-            {signupDone ? (
+            {showEmailLogin ? (
+              <>
+                <h2 style={{ textAlign: 'center', marginBottom: 24, fontWeight: 700 }}>
+                  이메일 로그인
+                </h2>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+                      이메일
+                    </p>
+                    <input
+                      type="email"
+                      placeholder="이메일을 입력해주세요."
+                      style={inputStyle}
+                      value={emailLoginEmail}
+                      onChange={(e) => setEmailLoginEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleEmailLogin()}
+                    />
+                  </div>
+
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+                      비밀번호
+                    </p>
+                    <input
+                      type="password"
+                      placeholder="비밀번호를 입력해주세요."
+                      style={inputStyle}
+                      value={emailLoginPassword}
+                      onChange={(e) => setEmailLoginPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleEmailLogin()}
+                    />
+                  </div>
+
+                  {emailLoginError && (
+                    <p style={{ fontSize: 13, color: '#ef4444', margin: 0, whiteSpace: 'pre-line' }}>
+                      {emailLoginError}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={handleEmailLogin}
+                    disabled={emailLoginLoading}
+                    style={{
+                      marginTop: 10,
+                      padding: 14,
+                      background: emailLoginLoading ? '#93b0f5' : '#00178E',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 10,
+                      fontWeight: 600,
+                      fontSize: 15,
+                      cursor: emailLoginLoading ? 'default' : 'pointer',
+                    }}
+                  >
+                    {emailLoginLoading ? '로그인 중…' : '로그인'}
+                  </button>
+
+                  <div>
+                    <p style={{ textAlign: 'center', fontSize: 14, fontWeight: 500, color: '#94a3b8', margin: '0 0 6px' }}>
+                      계정이 없으신가요?
+                    </p>
+                    <p
+                      onClick={() => { setShowEmailLogin(false); setShowSignup(true); }}
+                      style={{ textAlign: 'center', fontSize: 14, fontWeight: 500, color: 'rgba(0,23,142,0.6)', textDecoration: 'underline', textUnderlineOffset: '3px', cursor: 'pointer', margin: 0 }}
+                    >
+                      이메일로 회원가입하기 →
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : signupDone ? (
               <div style={{ textAlign: 'center', padding: '12px 0' }}>
                 <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>
                   대학원 준비,
@@ -421,6 +553,8 @@ export default function LoginPage({ onClose }: { onClose: () => void }) {
                     } else {
                       setShowSignup(false);
                       setSignupDone(false);
+                      setEmailLoginEmail(signupEmail);
+                      setShowEmailLogin(true);
                     }
                   }}
                   style={{
