@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { PAGE_BACKGROUND } from './styles/pageTheme'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
@@ -15,6 +15,10 @@ import RoadmapResult from "./pages/RoadmapResult"
 import About from './pages/About'
 
 function App() {
+  // 네브바 로고를 눌러 "/"로 다시 이동했을 때(이미 메인이어도) Main이 새로 마운트되게,
+  // location.key(매 navigate 마다 바뀜)를 key로 줘서 챗봇 입력 등 내부 상태를 초기화함
+  const location = useLocation()
+
   return (
     <div style={{
       width: '100vw',
@@ -35,7 +39,7 @@ function App() {
             <Navbar />
             <div style={{ flex: 1, minHeight: '100vh' }}>
               <Routes>
-                <Route path="/" element={<Main />} />
+                <Route path="/" element={<Main key={location.key} />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/papers" element={<Papers />} />
 
