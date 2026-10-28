@@ -35,7 +35,8 @@ function emit(next: BookmarkMap): void {
 }
 
 /* GET /papers/library?type=bookmark 항목
-   { type: "paper"|"hai", id, title, publishedDate, tags[], isBookmark, readingStatus } */
+   { type: "paper"|"hai_paper", id, title, publishedDate, tags[], isBookmark, readingStatus }
+   (서버는 휴먼AI를 "hai_paper" 로 보낸다. 예전 값 "hai" 도 같이 받는다) */
 type LibraryItem = {
   type?: string
   id?: string | number
@@ -47,7 +48,8 @@ type LibraryItem = {
 function toBookmarkedPaper(item: LibraryItem): BookmarkedPaper | null {
   if (item.id == null) return null
   // 일반 논문은 arxivId, 휴먼AI는 "hai-{id}" 로 키 통일
-  const arxivId = item.type === 'hai' ? `hai-${item.id}` : String(item.id)
+  const isHai = item.type === 'hai_paper' || item.type === 'hai'
+  const arxivId = isHai ? `hai-${item.id}` : String(item.id)
   return {
     arxivId,
     title: item.title ?? '',

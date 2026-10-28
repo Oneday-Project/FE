@@ -183,9 +183,7 @@ export default function Papers() {
   const [haiPapers, setHaiPapers] = useState<Paper[]>([])   // 휴먼AI공학전공 논문 (별도 API)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [nextCursor, setNextCursor] = useState<string | null>(null) // 다음 페이지 커서
   const fetchIdRef = useRef(0)   // 진행 중인 조회 식별 (오래된 응답 무시용)
-  const [hasNext, setHasNext] = useState(false) // 더보기 버튼 표시 여부
 
   // 컴포넌트 처음 마운트될 때 논문 자동 불러오기
   useEffect(() => {
@@ -275,8 +273,6 @@ export default function Papers() {
         // 첫 페이지가 도착하면 바로 화면에 보여주고, 나머지는 이어서 채운다
         setPapers([...collected])
         setAppliedKeyword(keyword)
-        setNextCursor(cursor)
-        setHasNext(more)
         setLoading(false)
 
         if (!loadAll || !more) break
@@ -287,24 +283,6 @@ export default function Papers() {
       setError('논문을 불러오는 데 실패했습니다. 콘솔에서 API 주소 또는 CORS 오류를 확인해주세요.')
     } finally {
       if (!isStale()) setLoading(false)
-    }
-  }
-
-  // '더 보기' — 다음 한 페이지만 이어붙인다 (검색 전 캐러셀 화면용)
-  const loadMorePapers = async () => {
-    if (!nextCursor) return
-    try {
-      const res = await fetch(`${API_PREFIX}/papers?take=${BROWSE_TAKE}&cursor=${encodeURIComponent(nextCursor)}`, {
-        method: 'GET', headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const json = await res.json()
-      const fetched: Paper[] = Array.isArray(json) ? json : json.data ?? json.papers ?? []
-      setPapers(prev => [...prev, ...fetched])
-      setNextCursor(Array.isArray(json) ? null : json.nextCursor ?? null)
-      setHasNext(Array.isArray(json) ? false : Boolean(json.hasNext))
-    } catch (e) {
-      console.error('논문 더 불러오기 실패:', e)
     }
   }
 
@@ -664,21 +642,6 @@ export default function Papers() {
               onBookmark={handleBookmark}
               onCardClick={handleCardClick}
             />
-            {/* hasNext가 true일 때만 더보기 버튼 표시 */}
-            {hasNext && (
-              <div style={{ textAlign: 'center', marginTop: '24px' }}>
-                <button
-                  onClick={() => void loadMorePapers()}
-                  style={{
-                    padding: '10px 28px', fontSize: '14px', fontWeight: 500,
-                    background: MAIN, color: '#fff', border: 'none',
-                    borderRadius: '10px', cursor: 'pointer',
-                  }}
-                >
-                  더 보기
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>
