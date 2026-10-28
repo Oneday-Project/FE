@@ -5,6 +5,7 @@ import Footer from './components/Footer'
 
 import LoginPage from './pages/login'
 import Community from './pages/Community'
+import CommunityDetail from './pages/CommunityDetail'
 import Papers from './pages/Papers'
 import Main from './pages/Main'
 import RoadmapHome from './pages/RoadmapHome'
@@ -44,6 +45,7 @@ function App() {
                 <Route path="/roadmap-result" element={<RoadmapResult />} />
 
                 <Route path="/community" element={<Community />} />
+                <Route path="/community/:board/:id" element={<CommunityDetail />} />
                 <Route path="/mypage" element={<MyPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
