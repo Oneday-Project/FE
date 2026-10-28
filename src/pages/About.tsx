@@ -445,7 +445,7 @@ const majors: Major[] = [
   {
     name: '감성공학과',
     tags: ['HCI', 'Multimodal', 'SAP', 'ML'],
-    url: 'https://ee.smu.ac.kr/ee/education/curriculum.do',
+    url: 'https://ee.smu.ac.kr/ee/index.do',
     desc: [
       '인간의 감정과 행동을 인식하고 이해하는 기술을 연구하는 대학원 과정입니다.',
       '',
