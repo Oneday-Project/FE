@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { INK, INK_80, MAIN } from '../styles/pageTheme'
 import ReadStatusTag from './ReadStatusTag'
 import { subscribeReadStatus, getReadStatusSnapshot } from '../lib/readStatus'
-import { fetchKoreanAbstract } from '../lib/paperSummary'
+import { fetchCardSummary } from '../lib/paperSummary'
 import type { Paper } from '../pages/Papers'
 
 /* 논문 카드 (피그마 기준) — 높이 255 / 내부 항목 간격 12
@@ -32,16 +32,16 @@ export default function PaperCard({
   const readMap = useSyncExternalStore(subscribeReadStatus, getReadStatusSnapshot)
   const readStatus = readMap[paper.arxivId]?.status ?? null
 
-  // 제목 아래는 한글 초록(AI 요약)을 보여준다. 받기 전·실패·비로그인이면 원문 초록
-  const [koAbstract, setKoAbstract] = useState<{ id: string; text: string | null } | null>(null)
+  // 제목 아래는 AI 요약의 cardSummary(한 줄 한글 요약)를 보여준다. 받기 전·없음·비로그인이면 원문 초록
+  const [cardSummary, setCardSummary] = useState<{ id: string; text: string | null } | null>(null)
   useEffect(() => {
     let cancelled = false
-    fetchKoreanAbstract(paper.arxivId).then(text => {
-      if (!cancelled) setKoAbstract({ id: paper.arxivId, text })
+    fetchCardSummary(paper.arxivId).then(text => {
+      if (!cancelled) setCardSummary({ id: paper.arxivId, text })
     })
     return () => { cancelled = true }
   }, [paper.arxivId])
-  const abstractText = (koAbstract?.id === paper.arxivId && koAbstract.text) || paper.abstract
+  const abstractText = (cardSummary?.id === paper.arxivId && cardSummary.text) || paper.abstract
 
   return (
     <div
@@ -100,7 +100,7 @@ export default function PaperCard({
       {/* 제목과 초록 사이 구분선 (피그마 367:220 Divider) — 저자는 카드에 노출하지 않는다 */}
       <div style={{ height: '1.2px', background: 'rgba(60,60,67,0.4)', width: '100%', flexShrink: 0 }} />
 
-      {/* 초록 (최대 3줄, 한글 우선) — Pretendard Regular 12 / 행간 16 */}
+      {/* 카드 요약 (최대 3줄, cardSummary 우선) — Pretendard Regular 12 / 행간 16 */}
       <p style={{
         ...CARD_BODY, color: INK_80, margin: 0,
         minWidth: 0, overflowWrap: 'anywhere',

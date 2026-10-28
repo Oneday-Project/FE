@@ -1,41 +1,61 @@
-// 논문 카드에 보여줄 한글 초록 — AI 요약(abstractKor)만 따로 불러온다
+// 논문 카드 제목 아래에 보여줄 한 줄 요약 — AI 요약의 cardSummary 컬럼
 //
-//   GET /ai-services/papers/{arxivId}     → 일반 논문
-//   GET /ai-services/hai-papers/{id}      → 휴먼AI 논문 (arxivId 가 "hai-{id}" 형태)
+//   GET /ai-services/papers       → 일반 논문 AI 요약 전체 [{ cardSummary, paper: { arxivId } }]
+//   GET /ai-services/hai-papers   → 휴먼AI 논문 AI 요약 전체 [{ cardSummary, haiPaper: { id } }]
 //
-// 목록 API(GET /papers, /papers/hai-papers)에는 한글 초록이 없어서 카드마다 이걸 한 번씩 부른다.
-// 같은 논문은 목록·상세 추천·마이페이지에서 여러 번 그려지므로 요청(Promise)째로 캐시해 한 번만 보낸다.
+// 목록 API(GET /papers, /papers/hai-papers)에는 요약이 없어서 위 두 개를 한 번만 받아
+// arxivId("hai-{id}" 포함) → cardSummary 표로 만들어 두고 모든 카드가 같이 쓴다.
 // 토큰이 있어야 조회되므로 비로그인이면 요청하지 않고 null — 카드는 원문 초록을 대신 보여준다.
 
 import { isLoggedIn, apiFetch } from './auth'
 
-const cache = new Map<string, Promise<string | null>>()
+type SummaryRow = {
+  cardSummary?: string | null
+  paper?: { arxivId?: string }
+  haiPaper?: { id?: number }
+}
 
-export function fetchKoreanAbstract(arxivId: string): Promise<string | null> {
-  if (!isLoggedIn()) return Promise.resolve(null)
+let table: Promise<Map<string, string>> | null = null
 
-  const cached = cache.get(arxivId)
-  if (cached) return cached
+async function loadRows(url: string): Promise<SummaryRow[]> {
+  const res = await apiFetch(url)
+  if (!res.ok) throw new Error(`${url} ${res.status}`)
+  const json = await res.json()
+  const rows = Array.isArray(json) ? json : json?.data
+  return Array.isArray(rows) ? rows : []
+}
 
-  const url = arxivId.startsWith('hai-')
-    ? `/api/ai-services/hai-papers/${encodeURIComponent(arxivId.slice(4))}`
-    : `/api/ai-services/papers/${encodeURIComponent(arxivId)}`
+function loadTable(): Promise<Map<string, string>> {
+  if (table) return table
 
-  const request = (async () => {
-    try {
-      const res = await apiFetch(url)
-      if (!res.ok) return null
-      const json = await res.json()
-      // 휴먼AI 라우트는 { data: ... } 로 감싸서 올 때가 있어 둘 다 받는다 (PaperDetail 과 동일)
-      const text: unknown = (json?.data ?? json)?.abstractKor
-      return typeof text === 'string' && text.trim() ? text.trim() : null
-    } catch {
-      return null
+  table = Promise.all([
+    loadRows('/api/ai-services/papers'),
+    loadRows('/api/ai-services/hai-papers'),
+  ]).then(([papers, haiPapers]) => {
+    const map = new Map<string, string>()
+    const put = (key: string | undefined, text: string | null | undefined) => {
+      if (key && text?.trim()) map.set(key, text.trim())
     }
-  })()
+    papers.forEach(r => put(r.paper?.arxivId, r.cardSummary))
+    haiPapers.forEach(r => put(r.haiPaper?.id != null ? `hai-${r.haiPaper.id}` : undefined, r.cardSummary))
+    return map
+  })
 
-  // 실패는 캐시하지 않는다 — 로그인 직후나 네트워크 복구 뒤 다시 그릴 때 재시도되도록
-  cache.set(arxivId, request)
-  request.then(text => { if (text === null) cache.delete(arxivId) })
-  return request
+  // 실패는 캐시하지 않는다 — 다음에 카드를 그릴 때 다시 시도되도록
+  table.catch(() => { table = null })
+  return table
+}
+
+/* 로그인/로그아웃하면 다시 받는다 (비로그인 때 실패한 상태가 남지 않게) */
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth-change', () => { table = null })
+}
+
+export async function fetchCardSummary(arxivId: string): Promise<string | null> {
+  if (!isLoggedIn()) return null
+  try {
+    return (await loadTable()).get(arxivId) ?? null
+  } catch {
+    return null
+  }
 }
