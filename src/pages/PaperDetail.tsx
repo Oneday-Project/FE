@@ -317,6 +317,13 @@ export default function PaperDetail({
                   : '저자 정보 없음'}
               </span>
             </div>
+            {/* 휴먼AI 논문만 — 어느 교수님 연구실 논문인지 */}
+            {paper.lab && (
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <span style={{ color: INK, flexShrink: 0 }}>연구실</span>
+                <span style={{ color: INK_80 }}>{paper.lab}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -917,6 +924,7 @@ async function fetchRelatedDetail(p: Paper): Promise<Paper | null> {
       abstract: raw.abstract ?? '',
       researchFields: raw.researchFields ?? (raw.department ? [raw.department] : []),
       publishedDate: raw.publishedYear ? `${raw.publishedYear}-01-01` : '',
+      lab: raw.department || p.lab,
     }
   } catch {
     return null

@@ -3,6 +3,7 @@ import { pageContainer, PAGE_TOP, pageTitle, HERO_GAP } from '../styles/pageThem
 import { useNavigate } from 'react-router-dom'
 import { clearToken, fetchMe, getToken, type Me } from '../lib/auth'
 import { getMyRoadmap, type MyRoadmap } from '../lib/roadmap'
+import { loadProfileImage, saveProfileImage, removeProfileImage, resizeProfileImage } from '../lib/profileImage'
 import PaperCard from '../components/PaperCard'
 import type { Paper } from './Papers'
 import {
@@ -31,9 +32,12 @@ export default function MyPage() {
   const [myRoadmap, setMyRoadmap] = useState<MyRoadmap | null>(null)
 
   // 마운트 시 실제 사용자 정보 조회 → 인사말·이름·닉네임·이메일 표시
+  // 프로필 이미지는 서버에 없어서 이 브라우저에 저장해 둔 값을 사용자 id 로 꺼낸다
   useEffect(() => {
     fetchMe().then(user => {
-      if (user) setMe(user)
+      if (!user) return
+      setMe(user)
+      setProfileImage(loadProfileImage(user.id))
     })
   }, [])
 
@@ -72,6 +76,7 @@ export default function MyPage() {
     } catch {
       // 네트워크 실패해도 클라이언트 세션은 정리하고 내보냄
     } finally {
+      if (me) removeProfileImage(me.id)   // 탈퇴한 계정의 프로필 이미지도 브라우저에서 지운다
       clearToken()        // 토큰 삭제 → 네브바가 '로그인/회원가입'으로, 로그인 안 된 상태가 됨
       setModal(null)
       setWithdrawing(false)
@@ -79,13 +84,19 @@ export default function MyPage() {
     }
   }
 
-  // 업로드 아이콘 클릭 → 숨겨진 input 열기 → 선택한 이미지 미리보기
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = () => setProfileImage(reader.result as string)
-      reader.readAsDataURL(file)
+  // 업로드 아이콘 클릭 → 숨겨진 input 열기 → 줄인 이미지를 보여주고 이 브라우저에 저장
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target
+    const file = input.files?.[0]
+    input.value = ''   // 같은 파일을 다시 골라도 onChange 가 오도록 비운다
+    if (!file) return
+
+    try {
+      const dataUrl = await resizeProfileImage(file)
+      setProfileImage(dataUrl)
+      if (me) saveProfileImage(me.id, dataUrl)
+    } catch {
+      alert('이미지를 불러오지 못했어요. 다른 이미지로 다시 시도해주세요.')
     }
   }
   return (
