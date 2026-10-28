@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useSyncExternalStore } from 'react'
 import { pageContainer, PAGE_TOP, pageTitle, HERO_GAP } from '../styles/pageTheme'
 import { useNavigate } from 'react-router-dom'
 import { clearToken, fetchMe, getToken, type Me } from '../lib/auth'
+import { getMyRoadmap, type MyRoadmap } from '../lib/roadmap'
 import PaperCard from '../components/PaperCard'
 import type { Paper } from './Papers'
 import {
@@ -18,18 +19,6 @@ import {
 
 const sideMenuItems = ['북마크한 논문', '읽고 있는 논문', '다 읽은 논문']
 
-// 학번 앞 4자리 = 입학년도 → 현재 날짜 기준 학년·학기 계산 (예: 202310847 → 2026년 10월 → 4학년 2학기)
-function gradeSemester(studentId: string | null | undefined): string | null {
-  const entry = Number(studentId?.slice(0, 4))
-  if (!entry) return null
-  const now = new Date()
-  const m = now.getMonth() + 1
-  const grade = now.getFullYear() - entry + (m >= 3 ? 1 : 0)
-  if (grade < 1) return null
-  const semester = m >= 3 && m <= 8 ? 1 : 2
-  return `${grade}학년 ${semester}학기`
-}
-
 export default function MyPage() {
   const navigate = useNavigate()
   const [activeMenu, setActiveMenu] = useState('프로필 수정')
@@ -39,6 +28,7 @@ export default function MyPage() {
   const [profileImage, setProfileImage] = useState<string | null>(null)
   const [modal, setModal] = useState<'logout' | 'withdraw' | null>(null)
   const [withdrawing, setWithdrawing] = useState(false)
+  const [myRoadmap, setMyRoadmap] = useState<MyRoadmap | null>(null)
 
   // 마운트 시 실제 사용자 정보 조회 → 인사말·이름·닉네임·이메일 표시
   useEffect(() => {
@@ -46,6 +36,19 @@ export default function MyPage() {
       if (user) setMe(user)
     })
   }, [])
+
+  /* 학년·학기는 학번(입학년도) 기준 자동 계산 대신 로드맵 설문에서 직접 고른 값을 쓴다.
+     군휴학 등으로 입학년도 기준 계산이 실제 학년과 안 맞는 경우가 있어서. */
+  useEffect(() => {
+    getMyRoadmap()
+      .then(res => setMyRoadmap(res))
+      .catch(() => { /* 조회 실패해도 안내 문구로 자연스럽게 처리됨 */ })
+  }, [])
+
+  const latestAnswers = myRoadmap?.hasRoadmap ? myRoadmap.latest?.answers : undefined
+  const gradeSemesterLabel = latestAnswers
+    ? `${latestAnswers.year}학년 ${latestAnswers.semester}학기`
+    : '로드맵을 만들면 표시돼요'
 
   // 실제 로그아웃 처리: 저장된 토큰을 삭제하고 메인으로 이동
   const handleLogout = () => {
@@ -205,7 +208,7 @@ export default function MyPage() {
                           ['닉네임', me.nickname],
                           ['학번', me.studentId],
                           ['학과', [me.department, me.secondDepartment].filter(Boolean).join(' / ')],
-                          ['학년·학기', gradeSemester(me.studentId)],
+                          ['학년·학기', gradeSemesterLabel],
                         ]
                       : [
                           ['이름', me?.username],
