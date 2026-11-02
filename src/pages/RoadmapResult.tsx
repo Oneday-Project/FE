@@ -302,7 +302,7 @@ export default function RoadmapResult() {
           return;
         }
 
-        setNickname(me?.nickname ?? "");
+        setNickname(me?.username ?? "");
         setAnalysis(mine.latest.result);
         // 최초 로드맵과 최근 로드맵이 다른 스냅샷일 때만 비교용으로 사용 (한 번만 만든 경우엔 겹쳐 그릴 필요 없음)
         setInitialAnalysis(mine.initial && mine.initial.createdAt !== mine.latest.createdAt ? mine.initial.result : null);
